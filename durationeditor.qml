@@ -10,7 +10,7 @@ import "zparkingb/selectionhelper.js" as SelHelper
 MuseScore {
     menuPath: "Plugins." + pluginName
     description: "---"
-    version: "1.0.0"
+    version: "1.0.1"
     readonly property var pluginName: "Duration Editor"
     readonly property var selHelperVersion: "1.2.0"
 
@@ -18,7 +18,7 @@ MuseScore {
     dockArea: "right"
     requiresScore: false
     width: 600
-    height: 200
+    height: 100
 
     Grid {
         id: layButtons
@@ -51,9 +51,6 @@ MuseScore {
             return;
         }
 		
-		if (Qt.fontFamilies().indexOf('Leland') < 0) {
-			console.log("Leland not found");
-		} 
 
     }
 
@@ -317,56 +314,7 @@ MuseScore {
         return el;
     }
 
-    /*function appendRest(cursor) {
-    var last = null;
-    var measure = cursor.measure;
-    var seg = measure.firstSegment;
-
-    debugMeasureLength(measure);
-
-    var i = 0;
-
-    do {
-    var element;
-    element = seg.elementAt(cursor.track);
-
-    console.log((i++) + ")" + element.userName());
-
-    if (element && ((element.type == Element.REST) || (element.type == Element.CHORD))) {
-    if (element.type === Element.CHORD)
-    last = element.notes[0];
-    else if (element.type === Element.REST)
-    last = element;
-    }
-
-    seg = seg.nextInMeasure;
-
-    } while (seg != null)
-
-    if (last == null) {
-    console.log(" Could not find a last note / rest in that measure ");
-    return;
-    }
-
-    cursor.score.selection.select(last);
-    insertRestAtSelection();
-
-    debugMeasureLength(measure);
-
-    }
-
-    function insertRest(cursor) {
-    cursor.setDuration(1, 2)
-    selectCursor(cursor);
-    insertRestAtSelection();
-    }
-
-    function insertRestAtSelection() {
-    cmd(" insert - a ");
-    var el = cursor.element;
-    removeElement(el); // to rest
-    }*/
-
+    
     function selectCursor(cursor) {
         var el = cursor.element;
         //console.log(el.duration.numerator + "--"+el.duration.denominator);
@@ -417,10 +365,10 @@ MuseScore {
         }
 
         // Select the range. !! Must be surrounded by startCmd/endCmd, otherwise a cmd(" cut ") crashes MS
-        console.log("-->Yes");
-        cursor.score.startCmd();
         var tick=last.tick;
         if (tick==cursor.score.lastSegment.tick) tick++;  // Bug in MS with the end of score ticks
+        console.log("--> Yes. Selecting from " + first.tick + " to " + tick);
+        cursor.score.startCmd();
         cursor.score.selection.selectRange(first.tick, tick, cursor.staffIdx, cursor.staffIdx);
         cursor.score.endCmd();
 
@@ -438,8 +386,10 @@ MuseScore {
         var element = null;
         //while ((last!=null) && (((element = last.elementAt(track)) == null) || (element.type == Element.REST))) {
         while ((last != null) && (((element = _d(last, track)) == null) || (element.type != Element.CHORD))) {
-            if (element != null)
+            if ((element != null) && (element.type == Element.REST)) {
                 the_real_last = last;
+                break;
+                }
             last = last.prevInMeasure;
         }
         element = the_real_last.elementAt(track);
