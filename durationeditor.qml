@@ -10,7 +10,7 @@ import "durationeditor"
 
 MuseScore {
     menuPath: "Plugins." + pluginName
-    description: "---"
+    description: "Edit the notes and rests length by moving the next notes in the measure, instead of eating them."
     version: "1.1.0"
     readonly property var pluginName: "Duration Editor"
     readonly property var selHelperVersion: "1.2.0"
@@ -21,6 +21,9 @@ MuseScore {
     width: 600
     height: 100
 
+    readonly property var imgHeight: 32
+    readonly property var imgPadding: 8
+
     Flow {
         id: layButtons
 
@@ -28,89 +31,90 @@ MuseScore {
         anchors.margins: 4
         spacing: 10
 
-        /*Button {
-        text: "1.25"
-        onClicked: {
-        var score = curScore;
-        var cursor = curScore.newCursor();
-        cursor.rewind(Cursor.SCORE_START);
-        appendRest(cursor, 4);
-        }
-        }*/
-
         ImageButton {
             imageSource: "ronde.svg"
-            imageHeight: 36
+            imageHeight: imgHeight
+            imagePadding: imgPadding
             ToolTip.text: "Whole/Semibreve"
             onClicked: setDuration(64);
         }
 
         ImageButton {
             imageSource: "blanche.svg"
-            imageHeight: 36
+            imageHeight: imgHeight
+            imagePadding: imgPadding
             ToolTip.text: "Half/Minim"
             onClicked: setDuration(32);
         }
 
         ImageButton {
             imageSource: "noire.svg"
-            imageHeight: 36
+            imageHeight: imgHeight
+            imagePadding: imgPadding
             ToolTip.text: "Quarter/Crotchet"
             onClicked: setDuration(16);
         }
 
         ImageButton {
             imageSource: "croche.svg"
-            imageHeight: 36
+            imageHeight: imgHeight
+            imagePadding: imgPadding
             ToolTip.text: "Eighth/Quaver"
             onClicked: setDuration(8);
         }
 
         ImageButton {
             imageSource: "double.svg"
-            imageHeight: 36
+            imageHeight: imgHeight
+            imagePadding: imgPadding
             ToolTip.text: "Sixteenth/Semiquaver"
             onClicked: setDuration(4);
         }
 
         ImageButton {
             imageSource: "triple.svg"
-            imageHeight: 36
+            imageHeight: imgHeight
+            imagePadding: imgPadding
             ToolTip.text: "Thirty-second/Demisemiquaver"
             onClicked: setDuration(2);
         }
 
         ImageButton {
             imageSource: "quadruple.svg"
-            imageHeight: 36
+            imageHeight: imgHeight
+            imagePadding: imgPadding
             ToolTip.text: "Sixty-fourth/Hemidemisemiquaver"
             onClicked: setDuration(1);
         }
 
         ImageButton {
             imageSource: "dot.svg"
-            imageHeight: 36
+            imageHeight: imgHeight
+            imagePadding: imgPadding
             ToolTip.text: "Dot"
             onClicked: setDot(1.5)
         }
 
         ImageButton {
             imageSource: "dot2.svg"
-            imageHeight: 36
+            imageHeight: imgHeight
+            imagePadding: imgPadding
             ToolTip.text: "Dubble dot"
             onClicked: setDot(1.75)
         }
 
         ImageButton {
             imageSource: "dot3.svg"
-            imageHeight: 36
+            imageHeight: imgHeight
+            imagePadding: imgPadding
             ToolTip.text: "Triple dot"
             onClicked: setDot(1.875)
         }
 
         ImageButton {
             imageSource: "dot4.svg"
-            imageHeight: 36
+            imageHeight: imgHeight
+            imagePadding: imgPadding
             ToolTip.text: "Quadruple dot"
             onClicked: setDot(1.9375)
         }
