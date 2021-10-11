@@ -6,11 +6,12 @@ import QtQuick.Dialogs 1.2
 import QtQuick.Controls.Styles 1.4
 import QtQuick.Layouts 1.1
 import "zparkingb/selectionhelper.js" as SelHelper
+import "durationeditor"
 
 MuseScore {
     menuPath: "Plugins." + pluginName
     description: "---"
-    version: "1.0.1"
+    version: "1.1.0"
     readonly property var pluginName: "Duration Editor"
     readonly property var selHelperVersion: "1.2.0"
 
@@ -20,24 +21,98 @@ MuseScore {
     width: 600
     height: 100
 
-    Grid {
+    Flow {
         id: layButtons
 
-        rows: 1
-        columnSpacing: 5
-        rowSpacing: 0
+        anchors.fill: parent
+        anchors.margins: 4
+        spacing: 10
 
-        Button {
-            text: "1/2"
-            onClicked: setDuration(32)
+        /*Button {
+        text: "1.25"
+        onClicked: {
+        var score = curScore;
+        var cursor = curScore.newCursor();
+        cursor.rewind(Cursor.SCORE_START);
+        appendRest(cursor, 4);
         }
-        Button {
-            text: "1/4"
-            onClicked: setDuration(16)
+        }*/
+
+        ImageButton {
+            imageSource: "ronde.svg"
+            imageHeight: 36
+            ToolTip.text: "Whole/Semibreve"
+            onClicked: setDuration(64);
         }
-        Button {
-            text: "1/8"
-            onClicked: setDuration(8)
+
+        ImageButton {
+            imageSource: "blanche.svg"
+            imageHeight: 36
+            ToolTip.text: "Half/Minim"
+            onClicked: setDuration(32);
+        }
+
+        ImageButton {
+            imageSource: "noire.svg"
+            imageHeight: 36
+            ToolTip.text: "Quarter/Crotchet"
+            onClicked: setDuration(16);
+        }
+
+        ImageButton {
+            imageSource: "croche.svg"
+            imageHeight: 36
+            ToolTip.text: "Eighth/Quaver"
+            onClicked: setDuration(8);
+        }
+
+        ImageButton {
+            imageSource: "double.svg"
+            imageHeight: 36
+            ToolTip.text: "Sixteenth/Semiquaver"
+            onClicked: setDuration(4);
+        }
+
+        ImageButton {
+            imageSource: "triple.svg"
+            imageHeight: 36
+            ToolTip.text: "Thirty-second/Demisemiquaver"
+            onClicked: setDuration(2);
+        }
+
+        ImageButton {
+            imageSource: "quadruple.svg"
+            imageHeight: 36
+            ToolTip.text: "Sixty-fourth/Hemidemisemiquaver"
+            onClicked: setDuration(1);
+        }
+
+        ImageButton {
+            imageSource: "dot.svg"
+            imageHeight: 36
+            ToolTip.text: "Dot"
+            onClicked: setDot(1.5)
+        }
+
+        ImageButton {
+            imageSource: "dot2.svg"
+            imageHeight: 36
+            ToolTip.text: "Dubble dot"
+            onClicked: setDot(1.75)
+        }
+
+        ImageButton {
+            imageSource: "dot3.svg"
+            imageHeight: 36
+            ToolTip.text: "Triple dot"
+            onClicked: setDot(1.875)
+        }
+
+        ImageButton {
+            imageSource: "dot4.svg"
+            imageHeight: 36
+            ToolTip.text: "Quadruple dot"
+            onClicked: setDot(1.9375)
         }
 
     }
@@ -50,7 +125,6 @@ MuseScore {
             invalidLibraryDialog.open();
             return;
         }
-		
 
     }
 
@@ -62,6 +136,34 @@ MuseScore {
 
         setElementDuration(chords[0], newDuration);
 
+    }
+
+    function setDot(newDuration) {
+        var chords = getSelection();
+
+        if (!chords || (chords.length == 0))
+            return;
+
+        setElementDot(chords[0], newDuration);
+
+    }
+
+    function setElementDot(element, dot) {
+        var current = durationTo64(element.duration);
+        var analyze = analyzeDuration(current);
+
+        console.log(current + " => " + analyze.base + "/" + analyze.ratio);
+
+        var newDuration;
+
+        if (dot == analyze.ratio) {
+            // Same "dot", removing it
+            newDuration = analyze.base;
+        } else {
+            newDuration = analyze.base * dot;
+        }
+
+        setElementDuration(element, newDuration);
     }
 
     function setElementDuration(element, newDuration) {
@@ -84,10 +186,12 @@ MuseScore {
             console.log("Required increment is : " + increment + ", current buffer is : " + buffer);
 
             // 1) on coupe ce qu'on va déplacer
-            var doCutPaste = selectionRemaingInMeasure(cursor);
+            var doCutPaste = selectRemaingInMeasure(cursor);
 
-            if (doCutPaste)
+            if (doCutPaste) {
+                console.log("CMD: cmd(\"cut\")");
                 cmd("cut");
+            }
 
             // 2) on adapte la longueur de la mesure (si on n'a pas assez de buffer)
             if (buffer < increment) {
@@ -96,15 +200,14 @@ MuseScore {
 
             // 3) on adapte la durée de la note
             cursor.rewindToTick(cur_time);
-            selectCursor(cursor);
-
-            selectionToDuration(current, newDuration);
+            cursorToDuration(cursor, newDuration);
 
             // 3) On fait le paste
             if (doCutPaste) {
                 cursor.rewindToTick(cur_time);
                 cursor.next();
                 selectCursor(cursor);
+                console.log("CMD: cmd(\"paste\")");
                 cmd("paste");
             }
             //score.endCmd();
@@ -113,14 +216,15 @@ MuseScore {
         if (increment < 0) {
 
             // 1) on coupe ce qu'on va déplacer
-            var doCutPaste = selectionRemaingInMeasure(cursor);
-            if (doCutPaste)
+            var doCutPaste = selectRemaingInMeasure(cursor);
+            if (doCutPaste) {
+                console.log("CMD: cmd(\"cut\")");
                 cmd("cut");
+            }
 
             // 2) on adapte la durée de la note
             cursor.rewindToTick(cur_time);
-            selectCursor(cursor);
-            selectionToDuration(current, newDuration);
+            cursorToDuration(cursor, newDuration);
             //cursor.element.duration=fraction(1, 2) // KO
 
 
@@ -129,6 +233,7 @@ MuseScore {
                 cursor.rewindToTick(cur_time);
                 cursor.next();
                 selectCursor(cursor);
+                console.log("CMD: cmd(\"paste\")");
                 cmd("paste");
             }
 
@@ -141,9 +246,8 @@ MuseScore {
 
         }
 
-                        cursor.rewindToTick(cur_time);
-            selectCursor(cursor);
-
+        cursor.rewindToTick(cur_time);
+        selectCursor(cursor);
 
     }
 
@@ -163,37 +267,96 @@ MuseScore {
         return chords;
     }
 
-    function selectionToDuration(orig, target) {
+    function cursorToDuration(cursor, target) {
 
-        //var re1=Math.log2(target);
-        var re1 = Math.log(target) / Math.log(2);
-        var re2 = re1 - (re1 | 0); // base - trunc(base);
-        re1 = re1 | 0; // = trunc
-        var ratio = ((Math.pow(2, re2) * 10000) | 0) / 10000;
+        var analyze = analyzeDuration(target);
+        var base = analyze.base;
+        var ratio = analyze.ratio;
 
-        console.log(orig + " -- " + target + " : " + re1 + "/" + ratio);
+        console.log(target + " : " + base + "/" + ratio);
 
-        var cmdline = "pad-note-" + (64 / Math.pow(2, re1));
-        console.log("-->" + cmdline);
+        selectCursor(cursor);
+        var cmdline = "pad-note-" + (64 / base);
+        console.log("CMD: cmd(\"" + cmdline + "\")");
         cmd(cmdline);
 
+        if (analyze.half != null) {
+            console.log("Dealing with \"1.25\" ratio (" + ratio + ")");
+            base = base / 2;
+
+            cmdline = "pad-note-" + (64 / base);
+            console.log("CMD: cmd(\"" + cmdline + "\")");
+            cmd(cmdline);
+
+            moveNext(cursor);
+            ratio = 1; // we don't apply any dot on this segment. We'll apply one on the next one.
+            // we repeat the same process with halfed duration
+            cursorToDuration(cursor, base * analyze.half);
+        }
+
         switch (ratio) {
-        case 1.25: // TO DO "pad-dot" c'est trop. Il faudrait scinder la note en 2 et faire "pad-dot" sur la moitié
         case 1.5:
-            console.log("-->pad-dot");
+            console.log("CMD: cmd(\"pad-dot\")");
             cmd("pad-dot")
             break;
-
         case 1.75:
-            console.log("-->pad-dotdot");
+            console.log("CMD: cmd(\"pad-dotdot\")");
             cmd("pad-dotdot")
             break;
 
         case 1.875:
-            console.log("-->pad-dot3");
+            console.log("CMD: cmd(\"pad-dot3\")");
             cmd("pad-dot3")
             break;
+        case 1.9375:
+            console.log("CMD: cmd(\"pad-dot4\")");
+            cmd("pad-dot4")
+            break;
+        case 1:
+            // 0 is normal. No reason to complain about.
+            break;
+        default:
+            console.log("!! Cannot find a dot for " + ratio);
         }
+
+    }
+
+    function analyzeDuration(target) {
+        var base = Math.log(target) / Math.log(2);
+        var remaining = base - (base | 0); // base - trunc(base);
+        base = base | 0; // = trunc
+        base = Math.pow(2, base);
+        var ratio = ((Math.pow(2, remaining) * 10000) | 0) / 10000;
+
+        var half = null; ;
+
+        // Gestion des arrondis
+        if (Math.abs(ratio - 1.25) <= 0.01) {
+            ratio = 1.25;
+            half = 1.5;
+        } else if (Math.abs(ratio - 1.375) <= 0.01) {
+            ratio = 1.375;
+            half = 1.75;
+        } else if (Math.abs(ratio - 1.4375) <= 0.01) {
+            ratio = 1.4375;
+            half = 1.875;
+        } else if (Math.abs(ratio - 1.46875) <= 0.01) {
+            ratio = 1.46875;
+            half = 1.9375;
+        } else if (Math.abs(ratio - 1.5) <= 0.01)
+            ratio = 1.5;
+        else if (Math.abs(ratio - 1.75) <= 0.01)
+            ratio = 1.75;
+        else if (Math.abs(ratio - 1.875) <= 0.01)
+            ratio = 1.875;
+        else if (Math.abs(ratio - 1.9375) <= 0.01)
+            ratio = 1.9375;
+
+        return {
+            "base": base,
+            "ratio": ratio,
+            "half": half
+        };
 
     }
 
@@ -214,6 +377,7 @@ MuseScore {
         console.log("Increasing from " + (sigDen * sig.numerator / sig.denominator) + " to " + sigNum);
 
         cursor.score.startCmd();
+        console.log("CMD: Modify timesigActual");
         measure.timesigActual = fraction(sigNum, sigDen);
         debugMeasureLength(measure);
         cursor.score.endCmd();
@@ -234,8 +398,9 @@ MuseScore {
         if (last != null) {
             var orig = durationTo64(last.duration);
             var target = orig + increment;
-            cursor.score.selection.select(last);
-            selectionToDuration(orig, target);
+            var tick = last.parent.tick;
+            cursor.rewindToTick(tick);
+            cursorToDuration(cursor, target);
         }
     }
 
@@ -267,18 +432,32 @@ MuseScore {
             return;
 
         // 3) Selecting last rest to adapt it/remove it
-        var last = measure.lastSegment;
-        var element = getPreviousRest(last, cursor.track);
 
-        var orig = durationTo64(element.duration);
-        if (orig == increment) {
-            cursor.score.selection.select(element);
-            cmd("time-delete");
+        var remaining = increment;
+        var element = null;
+        while ((remaining > 0) && ((element = getPreviousRest(measure.lastSegment, cursor.track)) != null)) {
+
+            var orig = durationTo64(element.duration);
+            if (orig <= remaining) {
+                cursor.score.selection.select(element);
+                console.log("CMD: cmd(\"time-delete\")");
+                cmd("time-delete");
+                remaining -= orig;
+            } else {
+                console.log("!! Couldn't find a correct element to time-delete. Looking for " + increment + ", found " + orig);
+                break;
+            }
+
+        }
+
+        if (remaining > 0) {
+            console.log("!! Couldn't time-delete all. Looking for " + increment + ", remaining is " + remaining);
         }
 
         // 4) Adapting the measure length
         var target = sigA.numerator - increment;
         cursor.score.startCmd();
+        console.log("CMD: Modify timesigActual");
         measure.timesigActual = fraction(target, sigA.denominator);
         cursor.score.endCmd();
         debugMeasureLength(measure);
@@ -314,7 +493,6 @@ MuseScore {
         return el;
     }
 
-    
     function selectCursor(cursor) {
         var el = cursor.element;
         //console.log(el.duration.numerator + "--"+el.duration.denominator);
@@ -326,7 +504,25 @@ MuseScore {
 
     }
 
-    function selectionRemaingInMeasure(cursor) {
+    /**
+     * Position to the next valid segment in the current measure.
+     */
+    function moveNext(cursor) {
+
+        var first = cursor.segment.nextInMeasure;
+        // for the first segment: we go the next *existing* element after the one at the cursor.
+        while (first && first.elementAt(cursor.track) === null) {
+            first = first.nextInMeasure;
+        }
+
+        if (first !== null) {
+            var tick = first.tick;
+            cursor.rewindToTick(tick);
+        }
+
+    }
+
+    function selectRemaingInMeasure(cursor) {
         var measure = cursor.measure;
         var first = cursor.segment.nextInMeasure;
         // for the first segment: we go the next *existing* element after the one at the cursor.
@@ -359,16 +555,19 @@ MuseScore {
             // Working at the end of the measure, we don't copy/paste
             console.log("-->No. Clear selection.");
             cursor.score.startCmd();
+            console.log("CMD: Selection clear");
             cursor.score.selection.clear();
             cursor.score.endCmd();
             return false;
         }
 
         // Select the range. !! Must be surrounded by startCmd/endCmd, otherwise a cmd(" cut ") crashes MS
-        var tick=last.tick;
-        if (tick==cursor.score.lastSegment.tick) tick++;  // Bug in MS with the end of score ticks
+        var tick = last.tick;
+        if (tick == cursor.score.lastSegment.tick)
+            tick++; // Bug in MS with the end of score ticks
         console.log("--> Yes. Selecting from " + first.tick + " to " + tick);
         cursor.score.startCmd();
+        console.log("CMD: SelectRange");
         cursor.score.selection.selectRange(first.tick, tick, cursor.staffIdx, cursor.staffIdx);
         cursor.score.endCmd();
 
@@ -389,7 +588,7 @@ MuseScore {
             if ((element != null) && (element.type == Element.REST)) {
                 the_real_last = last;
                 break;
-                }
+            }
             last = last.prevInMeasure;
         }
         element = the_real_last.elementAt(track);
