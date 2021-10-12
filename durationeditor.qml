@@ -35,56 +35,119 @@ MuseScore {
             imageSource: "ronde.svg"
             imageHeight: imgHeight
             imagePadding: imgPadding
-            ToolTip.text: "Whole/Semibreve"
-            onClicked: setDuration(64);
+            ToolTip.text: "Change to Whole/Semibreve\nSHIFT: insert a rest"
+            MouseArea {
+                anchors.fill: parent
+                onPressed: {
+                    if ((mouse.button == Qt.LeftButton) && (mouse.modifiers & Qt.ShiftModifier)) {
+                        insertRest(64);
+                    } else {
+                        setDuration(64);
+                    }
+                }
+            }
         }
 
         ImageButton {
             imageSource: "blanche.svg"
             imageHeight: imgHeight
             imagePadding: imgPadding
-            ToolTip.text: "Half/Minim"
-            onClicked: setDuration(32);
+            ToolTip.text: "Change to Half/Minim\nSHIFT: insert a rest"
+            MouseArea {
+                anchors.fill: parent
+                onPressed: {
+                    if ((mouse.button == Qt.LeftButton) && (mouse.modifiers & Qt.ShiftModifier)) {
+                        insertRest(32);
+                    } else {
+                        setDuration(32);
+                    }
+                }
+            }
         }
 
         ImageButton {
             imageSource: "noire.svg"
             imageHeight: imgHeight
             imagePadding: imgPadding
-            ToolTip.text: "Quarter/Crotchet"
-            onClicked: setDuration(16);
+            ToolTip.text: "Change to Quarter/Crotchet\nSHIFT: insert a rest"
+            MouseArea {
+                anchors.fill: parent
+                onPressed: {
+                    if ((mouse.button == Qt.LeftButton) && (mouse.modifiers & Qt.ShiftModifier)) {
+                        insertRest(16);
+                    } else {
+                        setDuration(16);
+                    }
+                }
+            }
         }
 
         ImageButton {
             imageSource: "croche.svg"
             imageHeight: imgHeight
             imagePadding: imgPadding
-            ToolTip.text: "Eighth/Quaver"
-            onClicked: setDuration(8);
+            ToolTip.text: "Change to Eighth/Quaver\nSHIFT: insert a rest"
+            MouseArea {
+                anchors.fill: parent
+                onPressed: {
+                    if ((mouse.button == Qt.LeftButton) && (mouse.modifiers & Qt.ShiftModifier)) {
+                        insertRest(8);
+                    } else {
+                        setDuration(8);
+                    }
+                }
+            }
         }
 
         ImageButton {
             imageSource: "double.svg"
             imageHeight: imgHeight
             imagePadding: imgPadding
-            ToolTip.text: "Sixteenth/Semiquaver"
-            onClicked: setDuration(4);
+            ToolTip.text: "Change to Sixteenth/Semiquaver\nSHIFT: insert a rest"
+            MouseArea {
+                anchors.fill: parent
+                onPressed: {
+                    if ((mouse.button == Qt.LeftButton) && (mouse.modifiers & Qt.ShiftModifier)) {
+                        insertRest(4);
+                    } else {
+                        setDuration(4);
+                    }
+                }
+            }
         }
 
         ImageButton {
             imageSource: "triple.svg"
             imageHeight: imgHeight
             imagePadding: imgPadding
-            ToolTip.text: "Thirty-second/Demisemiquaver"
-            onClicked: setDuration(2);
+            ToolTip.text: "Change to Thirty-second/Demisemiquaver\nSHIFT: insert a rest"
+            MouseArea {
+                anchors.fill: parent
+                onPressed: {
+                    if ((mouse.button == Qt.LeftButton) && (mouse.modifiers & Qt.ShiftModifier)) {
+                        insertRest(2);
+                    } else {
+                        setDuration(2);
+                    }
+                }
+            }
         }
 
         ImageButton {
             imageSource: "quadruple.svg"
             imageHeight: imgHeight
             imagePadding: imgPadding
-            ToolTip.text: "Sixty-fourth/Hemidemisemiquaver"
-            onClicked: setDuration(1);
+            ToolTip.text: "Change to Sixty-fourth/Hemidemisemiquaver\nSHIFT: insert a rest"
+            MouseArea {
+                anchors.fill: parent
+                onPressed: {
+                    if ((mouse.button == Qt.LeftButton) && (mouse.modifiers & Qt.ShiftModifier)) {
+                        insertRest(1);
+                    } else {
+                        setDuration(1);
+                    }
+                }
+            }
         }
 
         ImageButton {
@@ -119,6 +182,14 @@ MuseScore {
             onClicked: setDot(1.9375)
         }
 
+        ImageButton {
+            imageSource: "remove.svg"
+            imageHeight: imgHeight
+            imagePadding: imgPadding
+            ToolTip.text: "Delete"
+            onClicked: setDuration(0)
+        }
+
     }
 
     onRun: {
@@ -139,6 +210,16 @@ MuseScore {
             return;
 
         setElementDuration(chords[0], newDuration);
+
+    }
+
+    function insertRest(newDuration) {
+        var chords = getSelection();
+
+        if (!chords || (chords.length == 0))
+            return;
+
+        setElementDuration(chords[0], newDuration * (-1));
 
     }
 
@@ -170,17 +251,26 @@ MuseScore {
         setElementDuration(element, newDuration);
     }
 
+    /**
+     * newDuration>0: change the element to that duration
+     * newDuration==0: delete the element
+     * newDuration<0: insert a rest before the element with that duration
+     */
     function setElementDuration(element, newDuration) {
+
+        var insertmode = (newDuration < 0);
+        newDuration = Math.abs(newDuration);
 
         var score = curScore;
 
         var cur_time = element.parent.tick;
 
         var cursor = score.newCursor();
+        cursor.track = element.track;
         cursor.rewindToTick(cur_time);
 
-        var current = durationTo64(element.duration); ;
-        var increment = newDuration - current;
+        var current = durationTo64(element.duration);
+        var increment = (insertmode) ? newDuration : newDuration - current;
         console.log("from " + current + " to " + newDuration);
 
         if (increment > 0) {
@@ -190,7 +280,7 @@ MuseScore {
             console.log("Required increment is : " + increment + ", current buffer is : " + buffer);
 
             // 1) on coupe ce qu'on va déplacer
-            var doCutPaste = selectRemaingInMeasure(cursor);
+            var doCutPaste = selectRemaingInMeasure(cursor, insertmode);
 
             if (doCutPaste) {
                 console.log("CMD: cmd(\"cut\")");
@@ -221,6 +311,7 @@ MuseScore {
 
             // 1) on coupe ce qu'on va déplacer
             var doCutPaste = selectRemaingInMeasure(cursor);
+
             if (doCutPaste) {
                 console.log("CMD: cmd(\"cut\")");
                 cmd("cut");
@@ -228,14 +319,23 @@ MuseScore {
 
             // 2) on adapte la durée de la note
             cursor.rewindToTick(cur_time);
-            cursorToDuration(cursor, newDuration);
+            if (newDuration != 0)
+                cursorToDuration(cursor, newDuration);
+            else {
+                // duration 0, so replace the element by a rest
+                score.startCmd();
+                console.log("CMD: replace element by rest (removeElement)");
+                removeElement(element);
+                score.endCmd();
+            }
             //cursor.element.duration=fraction(1, 2) // KO
 
 
             // 3) On fait le paste
             if (doCutPaste) {
                 cursor.rewindToTick(cur_time);
-                cursor.next();
+                if (newDuration != 0)
+                    cursor.next();
                 selectCursor(cursor);
                 console.log("CMD: cmd(\"paste\")");
                 cmd("paste");
@@ -335,7 +435,11 @@ MuseScore {
         var half = null; ;
 
         // Gestion des arrondis
-        if (Math.abs(ratio - 1.25) <= 0.01) {
+        // Gestion des arrondis
+        if (Math.abs(ratio - 1.125) <= 0.01) {
+            ratio = 1.125;
+            half = 1.25;
+        } else if (Math.abs(ratio - 1.25) <= 0.01) {
             ratio = 1.25;
             half = 1.5;
         } else if (Math.abs(ratio - 1.375) <= 0.01) {
@@ -376,13 +480,12 @@ MuseScore {
 
         // We don't have enough, so we increase by what's msiing
         var sig = measure.timesigActual;
-        var sigDen = 64;
-        var sigNum = sigDen * sig.numerator / sig.denominator + increment;
-        console.log("Increasing from " + (sigDen * sig.numerator / sig.denominator) + " to " + sigNum);
+        var sigNum = sigTo64(sig) + increment;
+        console.log("Increasing from " + sigTo64(sig) + " to " + sigNum);
 
         cursor.score.startCmd();
         console.log("CMD: Modify timesigActual");
-        measure.timesigActual = fraction(sigNum, sigDen);
+        measure.timesigActual = fraction(sigNum, 64);
         debugMeasureLength(measure);
         cursor.score.endCmd();
 
@@ -418,16 +521,15 @@ MuseScore {
         increment *= -1;
 
         // 1) S'assurer qu'on ne veut pas supprimer plus que la longueur nominale de la mesure
-        var sigN = measure.timesigNominal;
-        var sigA = measure.timesigActual;
-        console.log("Required decrement is : " + increment + ", current available in measure is : " + (sigA.numerator - sigA.denominator));
-        increment = sigA.numerator - Math.max(sigA.numerator - increment, sigA.denominator);
+        var sigA = sigTo64(measure.timesigActual);
+        console.log("Required decrement is : " + increment + ", current available in measure is : " + (sigA - 64));
+        increment = sigA - Math.max(sigA - increment, 64);
         // réduction au-delà de ce qui est disponible, on ne fait rien
         if (increment <= 0)
             return;
 
         // 2) Computing available rest duration
-        var available = computeRemainingRest(measure, cursor.track);
+        var available = computeRemainingRest(measure, null); //  we count the available rest, **whathever the tracks**
         console.log("Required decrement is : " + increment + ", current available as rest is : " + available);
 
         increment = Math.min(increment, available);
@@ -448,8 +550,12 @@ MuseScore {
                 cmd("time-delete");
                 remaining -= orig;
             } else {
-                console.log("!! Couldn't find a correct element to time-delete. Looking for " + increment + ", found " + orig);
-                break;
+                // The rest is too big. Splitting it in 2.
+                var split = orig / 2;
+                var tick = element.parent.tick;
+                cursor.rewindToTick(tick);
+                cursorToDuration(cursor, split);
+                console.log("Element too big for time-delete (looking for " + increment + ", found " + orig + ") => splitting it");
             }
 
         }
@@ -458,11 +564,13 @@ MuseScore {
             console.log("!! Couldn't time-delete all. Looking for " + increment + ", remaining is " + remaining);
         }
 
+        increment -= remaining; // keep aligned how I will reduce the measure to what I have been able to time-delete
+
         // 4) Adapting the measure length
-        var target = sigA.numerator - increment;
+        var target = sigA - increment;
         cursor.score.startCmd();
         console.log("CMD: Modify timesigActual");
-        measure.timesigActual = fraction(target, sigA.denominator);
+        measure.timesigActual = fraction(target, 64);
         cursor.score.endCmd();
         debugMeasureLength(measure);
 
@@ -472,23 +580,67 @@ MuseScore {
         return 64 * duration.numerator / duration.denominator;
     }
 
+    function sigTo64(sig) {
+        return 64 * sig.numerator / sig.denominator;
+    }
+
     /**
      * Computes the duration of the rests at the end of the measure.
+     * If the track is empty (no chords, no rests) return an arbitrary value of -1
      */
     function computeRemainingRest(measure, track) {
         var last = measure.lastSegment;
         var duration = 0;
-        var element;
-        //while ((last!=null) && (((element = last.elementAt(track)) == null) || (element.type == Element.REST))) {
-        while ((last != null) && (((element = _d(last, track)) == null) || (element.type != Element.CHORD))) {
-            if ((element != null) && (element.type == Element.REST)) {
-                duration += durationTo64(element.duration);
+
+        console.log("Analyzing track " + (((track !== undefined) && (track != null)) ? track : "all"));
+
+        if ((track !== undefined) && (track != null)) {
+            duration = _computeRemainingRest(measure, track);
+            return duration;
+
+        } else {
+            duration = 999;
+            // Analyze made on all tracks
+            for (var t = 0; t < curScore.ntracks; t++) {
+                console.log(">>>> " + t + "/" + curScore.ntracks + " <<<<");
+                var localavailable = _computeRemainingRest(measure, t);
+                console.log("Available at track " + t + ": " + localavailable + " (" + duration + ")");
+                duration = Math.min(duration, localavailable);
+                if (duration == 0)
+                    break;
             }
-            last = last.prevInMeasure;
+            return duration;
         }
 
-        return duration;
+    }
 
+	/*
+	* Instead of counting the rests at the end of measure, we count what's inside the measure beyond the last rests.
+	* That way, we take into account the fact that changing the time signature of a measure doesn't fill it with rests, but leaves an empty space.
+	*/
+    function _computeRemainingRest(measure, track) {
+        var last = measure.lastSegment;
+        var duration = sigTo64(measure.timesigActual);
+
+        console.log("Analyzing track " + (((track !== undefined) && (track != null)) ? track : "all"));
+
+        if ((track !== undefined) && (track != null)) {
+            // Analyze limited to one track
+			var inTail=true;
+            while (last != null) {
+				var element = _d(last, track);
+                if ((element != null) && (element.type == Element.CHORD)) {
+					// As soon as we encounter a Chord, we leave the "rest-tail"
+                    inTail=false;
+                }
+                if ((element != null) && ((element.type == Element.REST)||(element.type == Element.CHORD)) && !inTail) {
+					// When not longer in the "rest-tail" we decrease the remaing length by the element duration 
+                    duration -= durationTo64(element.duration);
+                }
+                last = last.prevInMeasure;
+            }
+        }
+        return duration;
     }
 
     function _d(last, track) {
@@ -526,9 +678,10 @@ MuseScore {
 
     }
 
-    function selectRemaingInMeasure(cursor) {
+    function selectRemaingInMeasure(cursor, include) {
         var measure = cursor.measure;
-        var first = cursor.segment.nextInMeasure;
+        //var first = cursor.segment.nextInMeasure;
+        var first = (include === undefined || !include) ? cursor.segment.nextInMeasure : cursor.segment;
         // for the first segment: we go the next *existing* element after the one at the cursor.
         while (first.elementAt(cursor.track) === null) {
             first = first.nextInMeasure;
@@ -569,13 +722,14 @@ MuseScore {
         var tick = last.tick;
         if (tick == cursor.score.lastSegment.tick)
             tick++; // Bug in MS with the end of score ticks
-        console.log("--> Yes. Selecting from " + first.tick + " to " + tick);
+        console.log("--> Yes. Selecting from " + first.tick + "/" + cursor.staffIdx + " to " + tick + "/" + cursor.staffIdx);
+        var res = false;
         cursor.score.startCmd();
         console.log("CMD: SelectRange");
-        cursor.score.selection.selectRange(first.tick, tick, cursor.staffIdx, cursor.staffIdx);
+        res = cursor.score.selection.selectRange(first.tick, tick, cursor.staffIdx, cursor.staffIdx + 1);
         cursor.score.endCmd();
 
-        return true;
+        return res;
 
     }
 
