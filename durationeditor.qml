@@ -6,16 +6,27 @@ import QtQuick.Dialogs 1.2
 import QtQuick.Controls.Styles 1.4
 import QtQuick.Layouts 1.1
 import "zparkingb/selectionhelper.js" as SelHelper
+import "zparkingb/notehelper.js" as NoteHelper
 import "durationeditor"
+
+/**********************
+/* Parking B - DurationEditor - New approach for note duration edition
+/* v1.2.0
+/* ChangeLog:
+/* 	- 1.1.0: Initial release
+/* 	- 1.2.0: New Tie note functionality
+/**********************************************/
 
 MuseScore {
     menuPath: "Plugins." + pluginName
     description: "Edit the notes and rests length by moving the next notes in the measure, instead of eating them."
-    version: "1.1.0"
+    version: "1.2.0"
     readonly property var pluginName: "Duration Editor"
     readonly property var selHelperVersion: "1.2.0"
+    readonly property var noteHelperVersion: "1.0.4"
 
     pluginType: "dock"
+    // pluginType: "dialog"
     dockArea: "right"
     requiresScore: false
     width: 600
@@ -190,13 +201,26 @@ MuseScore {
             onClicked: setDuration(0)
         }
 
+        ImageButton {
+            id: btnTie
+            // imageSource: "qrc:///data/icons/note-tie.svg"
+            imageSource: "tie.svg"
+            imageHeight: imgHeight
+            imagePadding: imgPadding
+            // fillMode: Image.PreserveAspectCrop
+            ToolTip.text: "Tie rest to previous chord/Tie chord to next rest."
+            onClicked: addTie()
+        }
+
     }
 
     onRun: {
 
-        if ((typeof(SelHelper.checktVersion) !== 'function') || !SelHelper.checktVersion(selHelperVersion)) {
-            console.log("Invalid zparkingb/selectionhelper.js. Expecting "
-                 + selHelperVersion + ".");
+        // Versionning
+        if ((typeof(SelHelper.checktVersion) !== 'function') || !SelHelper.checktVersion(selHelperVersion) ||
+            (typeof(NoteHelper.checktVersion) !== 'function') || !NoteHelper.checktVersion(noteHelperVersion)) {
+            console.log("Invalid zparkingb/selectionhelper.js or zparkingb/notehelper.js versions. Expecting "
+                 + selHelperVersion + " and " + noteHelperVersion + ".");
             invalidLibraryDialog.open();
             return;
         }
@@ -355,6 +379,95 @@ MuseScore {
 
     }
 
+    function addTie() {
+        var rests = getSelection();
+        if (rests.length == 0) {
+            console.log("NO SELECTION. QUIT HERE.");
+            return;
+        }
+
+        var rest = rests[0];
+        var source = null;
+
+        var cur_time = rest.parent.tick; // getting rest's segment's tick
+        var cursor = curScore.newCursor();
+		cursor.track=rest.track;
+		
+        cursor.rewindToTick(cur_time);
+
+        if (rest.type === Element.REST) {
+
+            console.log("REST ==> looking behind for a CHORD");
+
+            if (!movePrev(cursor)) {
+                warningDialog.text = "Failed to tie the rest.\nCannot identify a chord to tie from.";
+                warningDialog.open();
+                return;
+            }
+
+            source = cursor.element;
+
+            if (source === null) {
+                warningDialog.text = "Failed to tie the rest.\nCannot identify a chord to tie from.";
+                warningDialog.open();
+                return;
+            }
+
+            if (source.type !== Element.CHORD) {
+                warningDialog.text = "Failed to tie the rest.\nThe selected rest must to preceded by a chord.";
+                warningDialog.open();
+                return;
+            }
+        } // current is rest
+        else {
+            console.log("CHORD ==> looking forward for a REST");
+            source = rest;
+            if (!moveNext(cursor)) {
+                warningDialog.text = "Failed to tie the chord.\nCannot identify a rest to tie to.";
+                warningDialog.open();
+                return;
+            }
+
+            rest = cursor.element;
+
+            if (rest === null) {
+                warningDialog.text = "Failed to tie the chord.\nCannot identify a rest to tie to.";
+                warningDialog.open();
+                return;
+            }
+
+            if (rest.type !== Element.REST) {
+                warningDialog.text = "Failed to tie the chord.\nThe selected chord must to followed by a rest.";
+                warningDialog.open();
+                return;
+            }
+
+        }
+
+        // A source is found.
+        // var note = source.notes[0];
+        console.log("Got a source at " + source.parent.tick + " and a dest at " + rest.parent.tick);
+        var notes = [];
+        for (var i = 0; i < source.notes.length; i++) {
+            notes.push(source.notes[i].pitch);
+        }
+
+        // Transforming the rest into the notes
+        curScore.startCmd();
+
+        NoteHelper.restToChord(rest, notes, true); // with keepRestDuration=true
+
+        cursor.rewindToTick(source.parent.tick);
+        selectCursor(cursor);
+        cmd("chord-tie");
+
+        cursor.rewindToTick(rest.parent.tick);
+        // cursor.rewindToTick(cur_time);
+        selectCursor(cursor);
+
+        curScore.endCmd();
+    }
+
     function getSelection() {
         var chords = SelHelper.getChordsRestsFromCursor();
 
@@ -392,7 +505,7 @@ MuseScore {
             console.log("CMD: cmd(\"" + cmdline + "\")");
             cmd(cmdline);
 
-            moveNext(cursor);
+            moveNextInMeasure(cursor);
             ratio = 1; // we don't apply any dot on this segment. We'll apply one on the next one.
             // we repeat the same process with halfed duration
             cursorToDuration(cursor, base * analyze.half);
@@ -614,10 +727,10 @@ MuseScore {
 
     }
 
-	/*
-	* Instead of counting the rests at the end of measure, we count what's inside the measure beyond the last rests.
-	* That way, we take into account the fact that changing the time signature of a measure doesn't fill it with rests, but leaves an empty space.
-	*/
+    /*
+     * Instead of counting the rests at the end of measure, we count what's inside the measure beyond the last rests.
+     * That way, we take into account the fact that changing the time signature of a measure doesn't fill it with rests, but leaves an empty space.
+     */
     function _computeRemainingRest(measure, track) {
         var last = measure.lastSegment;
         var duration = sigTo64(measure.timesigActual);
@@ -626,15 +739,15 @@ MuseScore {
 
         if ((track !== undefined) && (track != null)) {
             // Analyze limited to one track
-			var inTail=true;
+            var inTail = true;
             while (last != null) {
-				var element = _d(last, track);
+                var element = _d(last, track);
                 if ((element != null) && (element.type == Element.CHORD)) {
-					// As soon as we encounter a Chord, we leave the "rest-tail"
-                    inTail=false;
+                    // As soon as we encounter a Chord, we leave the "rest-tail"
+                    inTail = false;
                 }
-                if ((element != null) && ((element.type == Element.REST)||(element.type == Element.CHORD)) && !inTail) {
-					// When not longer in the "rest-tail" we decrease the remaing length by the element duration 
+                if ((element != null) && ((element.type == Element.REST) || (element.type == Element.CHORD)) && !inTail) {
+                    // When not longer in the "rest-tail" we decrease the remaing length by the element duration
                     duration -= durationTo64(element.duration);
                 }
                 last = last.prevInMeasure;
@@ -649,21 +762,36 @@ MuseScore {
         return el;
     }
 
+    /*function selectCursor(cursor) {
+    var el = cursor.element;
+    //console.log(el.duration.numerator + "--"+el.duration.denominator);
+    if (el.type === Element.CHORD)
+    el = el.notes[0];
+    else if (el.type !== Element.REST)
+    return false;
+    cursor.score.selection.select(el);
+
+    }*/
+
     function selectCursor(cursor) {
         var el = cursor.element;
         //console.log(el.duration.numerator + "--"+el.duration.denominator);
-        if (el.type === Element.CHORD)
-            el = el.notes[0];
-        else if (el.type !== Element.REST)
+        if (el.type === Element.CHORD) {
+            for (var i = 0; i < el.notes.length; i++) {
+                var note = el.notes[i];
+                cursor.score.selection.select(note, (i !== 0)); //addToSelection for i > 0
+            }
+        } else if (el.type !== Element.REST)
             return false;
-        cursor.score.selection.select(el);
+        else
+            cursor.score.selection.select(el);
 
     }
 
     /**
      * Position to the next valid segment in the current measure.
      */
-    function moveNext(cursor) {
+    function moveNextInMeasure(cursor) {
 
         var first = cursor.segment.nextInMeasure;
         // for the first segment: we go the next *existing* element after the one at the cursor.
@@ -675,6 +803,52 @@ MuseScore {
             var tick = first.tick;
             cursor.rewindToTick(tick);
         }
+
+    }
+
+    /**
+     * Position to the next valid segment on the same track.
+     */
+    function moveNext(cursor) {
+
+        var first = cursor.segment.next;
+        debugSegment(first, cursor.track);
+
+        // for the first segment: we go the first previous *existing* element on the same track.
+        while (first && ((first.segmentType != 512) || (first.elementAt(cursor.track) === null))) {
+            first = first.next;
+            debugSegment(first, cursor.track);
+        }
+
+        if (first === null) {
+            return false;
+        }
+        var tick = first.tick;
+        cursor.rewindToTick(tick);
+        return true;
+
+    }
+
+    /**
+     * Position to the previous valid segment on the same track.
+     */
+    function movePrev(cursor) {
+
+        var first = cursor.segment.prev;
+        //debugSegment(first, cursor.track);
+
+        // for the first segment: we go the first previous *existing* element on the same track.
+        while (first && ((first.segmentType != 512) || (first.elementAt(cursor.track) === null))) {
+            first = first.prev;
+            //debugSegment(first, cursor.track);
+        }
+
+        if (first === null) {
+            return false;
+        }
+        var tick = first.tick;
+        cursor.rewindToTick(tick);
+        return true;
 
     }
 
@@ -760,15 +934,27 @@ MuseScore {
 
     }
 
+    function debugSegment(segment, track) {
+        var el = (segment !== null) ? segment.elementAt(track) : null;
+        console.log("segment=" + ((segment !== null) ? segment.segmentType : "/") + " (with " + ((el !== null) ? el.userName() : "/") + " on track "+track+")");
+    }
+
     MessageDialog {
         id: invalidLibraryDialog
         icon: StandardIcon.Critical
         standardButtons: StandardButton.Ok
         title: 'Invalid libraries'
-        text: "Invalid 'zparkingb/selectionhelper.js' version.\nExpecting "
-         + selHelperVersion + ".\n" + pluginName + " will stop here."
+        text: "Invalid 'zparkingb/notehelper.js' or 'zparkingb/selhelper.js' versions.\nExpecting " + noteHelperVersion + " and " + selHelperVersion + ".\n" + pluginName + " will stop here."
         onAccepted: {
             Qt.quit()
         }
+    }
+
+    MessageDialog {
+        id: warningDialog
+        icon: StandardIcon.Warning
+        standardButtons: StandardButton.Ok
+        title: 'Warning'
+        text: "--"
     }
 }
