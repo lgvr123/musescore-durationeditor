@@ -3,22 +3,24 @@ import QtQuick.Controls 2.2
 
 /**********************
 /* Parking B - ImageButton
-/* v1.2.0
+/* v1.2.1
 /* ChangeLog:
 /* 	- 1.1.0: Initial release
 /* 	- 1.1.0: New color for Disabled mode
 /* 	- 1.2.0: New fillMode option
+/*  - 1.2.1: Sizing corrections
 /**********************************************/
 
 Button {
     id: smbtn
     property var imageSource: ""
-    property int imageHeight: 18
+    property alias imageHeight: img.height
+    property alias imageWidth: img.width
     property int imagePadding: 3
-	property alias fillMode: img.fillMode 
+	property alias imageFillMode: img.fillMode 
     font.pointSize: 7
-    implicitWidth: img.height + imagePadding * 2
-    implicitHeight: img.width + imagePadding * 2
+    implicitWidth: img.width + imagePadding * 2
+    implicitHeight: img.height + imagePadding * 2
     background: Rectangle {
         implicitWidth: smbtn.width
         implicitHeight: smbtn.height
@@ -32,7 +34,7 @@ Button {
     Image {
 		id: img
         source: smbtn.imageSource
-        height: smbtn.imageHeight
+        height: 18
         fillMode: Image.PreserveAspectFit // ensure it fits
         mipmap: true // smoothing
         anchors.centerIn: parent

@@ -3,6 +3,7 @@
 /* v1.0.0
 /* v1.2.0 28/9/21 getChordsRestsFromCursor
 /* v1.2.1 2/10/21 corrected name of checktVersion
+/* v1.2.2 15/03/22 correction in getChordsRestsFromSelection
 /**********************************************/
 
 // -----------------------------------------------------------------------
@@ -13,7 +14,7 @@ function checktVersion(expected) {
     return checkVersion(expected);
 }
 function checkVersion(expected) {
-    var version = "1.2.1";
+    var version = "1.2.2";
 
 	var aV = version.split('.').map(function (v) {return parseInt(v);});
 	var aE = (expected && (expected != null)) ? expected.split('.').map(function (v) {return parseInt(v);}) : [99];
@@ -125,7 +126,7 @@ function getChordsRestsFromSelection() {
             prevChord = undefined;
         } else if (element.type === Element.NOTE) {
             var chord = element.parent;
-            if (!prevChord || (prevChord !== chord)) {
+            if (!prevChord || (prevChord.track !== chord.track) || (prevChord.parent.tick !== chord.parent.tick)) { // 15/03
                 chords.push(chord);
             }
             prevChord = chord;

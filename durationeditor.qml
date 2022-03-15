@@ -23,12 +23,12 @@ MuseScore {
     description: "Edit the notes and rests length by moving the next notes in the measure, instead of eating them."
     version: "1.2.0"
     readonly property var pluginName: "Duration Editor"
-    readonly property var selHelperVersion: "1.2.0"
+    readonly property var selHelperVersion: "1.2.2"
     readonly property var noteHelperVersion: "1.0.4"
 
     readonly property var debug: false
-	
-    pluginType: debug?undefined:"dock"
+
+    pluginType: debug ? undefined : "dock"
     dockArea: "right"
     requiresScore: false
     width: 600
@@ -214,14 +214,32 @@ MuseScore {
             onClicked: addTie()
         }
 
-        ImageButton {
-            id: btnTuplet
-            imageSource: "tuplets.svg"
-            imageHeight: imgHeight
-            imagePadding: imgPadding
-            // fillMode: Image.PreserveAspectCrop
-            ToolTip.text: "Convert regular chords to and from tuplets."
-            onClicked: addRemoveTupplet()
+        Item {
+			// height: btnTuplet.height
+			height: imgHeight
+			// width: btnTuplet.width+btnManualTuplet.width
+			width: 50
+            ImageButton {
+                id: btnTuplet
+                imageSource: "tuplets.svg"
+                imageHeight: imgHeight
+                imagePadding: imgPadding
+                // fillMode: Image.PreserveAspectCrop
+                ToolTip.text: "Convert regular chords to and from tuplets."
+                onClicked: addRemoveTupplet(false)
+            }
+            ImageButton {
+                id: btnManualTuplet
+				x: btnTuplet.x+btnTuplet.width
+				y: btnTuplet.y
+                imageSource: "arrowbutton.svg"
+                imageHeight: 16
+				implicitHeight: btnTuplet.height
+                imagePadding: 2
+                //fillMode: Image.PreserveAspectCrop
+                ToolTip.text: "Manual conversion to tuplets."
+                onClicked: addRemoveTupplet(true)
+            }
         }
 
     }
@@ -238,7 +256,8 @@ MuseScore {
         }
 
         // auto-run test
-        if (debug) addRemoveTupplet();
+        if (debug)
+            addRemoveTupplet();
 
     }
 
@@ -483,12 +502,17 @@ MuseScore {
         endCmd(curScore);
     }
 
-    function addRemoveTupplet() {
+    function addRemoveTupplet(ask) {
         var tupletChords = getTupletsFromSelection();
 
         if (tupletChords && (tupletChords.length > 0)) {
             // Tuplets selected - Converting to regular chords
             console.log("TUPLETS FOUND FROM SELECTION");
+            if (ask) {
+                warningDialog.text = "Failed to convert to/from tuplets.\nThe manual conversion only applies to regular chords.";
+                warningDialog.open();
+                return;
+            }
             convertChordsFromTuplets(tupletChords);
 
         } else if (tupletChords && (tupletChords.length == 0)) {
@@ -498,20 +522,22 @@ MuseScore {
             if (tupletChords && (tupletChords.length > 0)) {
                 // Regular chords selected - Converting to tuplets chords
                 console.log("THE SELECTION CAN BE CONVERTED to TUPLETS");
-                convertChordsToTuplets(tupletChords);
+                convertChordsToTuplets(tupletChords, ask);
 
             } else {
-                console.log("INVALID SELECTION");
+                warningDialog.text = "Failed to convert to/from tuplets.\nInvalid selection.";
+                warningDialog.open();
                 return;
             }
 
         } else {
-            console.log("INVALID SELECTION");
+            warningDialog.text = "Failed to convert to/from tuplets.\nInvalid selection.";
+            warningDialog.open();
             return;
         }
 
     }
-    function convertChordsToTuplets(chords) {
+    function convertChordsToTuplets(chords, ask) {
         // Transforming regular notes into tuplets
         var measure = chords[0].parent.parent;
 
@@ -531,7 +557,9 @@ MuseScore {
 
         if (measureType == 4) {
             // 2/4, 3/4, 4/4, ...
-            for (var n = 3; n <= 9; n++) {
+			var nums=[3,5,7,9,4,6,8];
+            for (var i = 0; i < nums.length; i++) {
+				var n=nums[i];
                 if (isTupletCandidate(duration, n)) {
                     tupletN = n;
                     break;
@@ -550,9 +578,24 @@ MuseScore {
 
         console.log("Heading to " + ((tupletN != null) ? (tupletN + ":" + tupletD + " of " + (duration / tupletN)) : "???"));
 
-        if (tupletN == null) {
-            console.log("Failed to identify the tuplet structure");
-            return false;
+        if (ask || (tupletN == null) || (tupletD == null) || (tupletN == tupletD)) {
+            manualTupletDefinitionDialog.chords = chords;
+            manualTupletDefinitionDialog.duration = duration;
+            manualTupletDefinitionDialog.measureType = measureType;
+            manualTupletDefinitionDialog.tupletN = tupletN;
+            manualTupletDefinitionDialog.tupletD = tupletD;
+            manualTupletDefinitionDialog.open();
+            return;
+        } else {
+            convertChordsToTuplets_Exectute(chords, duration, measureType, tupletN, tupletD);
+        }
+    }
+
+    function convertChordsToTuplets_Exectute(chords, duration, measureType, tupletN, tupletD) {
+        if (tupletN == null || tupletD == null) {
+            warningDialog.text = "Failed to convert to/from tuplets.\nWrong tuplet definition: --" + ((tupletN) ? tupletN : "/") + ":" + ((tupletD) ? tupletD : "/") + "--";
+            warningDialog.open();
+            return;
         }
 
         // Inserting the triplet
@@ -576,10 +619,10 @@ MuseScore {
         var targetdur = duration * tupletD / tupletN;
         console.log("duration modification : " + duration + " --> " + targetdur);
         var delta = duration - targetdur;
+            startCmd(curScore, "adapt last note duration");
         for (var i = chords.length - 1; i >= 0; i--) {
             var last = chords[i];
             var newDuration = durationTo64(last.duration) - delta;
-			startCmd(curScore,"adapt last note duration");
             if (newDuration >= 0) {
                 setElementDuration(last, newDuration);
                 break;
@@ -588,23 +631,30 @@ MuseScore {
                 setElementDuration(last, 0);
                 delta = newDuration * (-1);
             }
-            endCmd(curScore,"adapt last note duration"); // DEBUG
         }
-        // 2) adding a tuplet
+            endCmd(curScore, "adapt last note duration"); // DEBUG
+        
+		// 2) adding a tuplet
         var cur_time = chords[0].parent.tick;
         var cursor = curScore.newCursor();
         cursor.track = chords[0].track;
         cursor.rewindToTick(cur_time);
 
-        startCmd(curScore,"addTuplet");
-        cursor.addTuplet(fraction(tupletN, tupletD), fraction(duration / tupletN, 64 * tupletD / measureType));
-		endCmd(curScore,"addTuplet"); 
+
+        startCmd(curScore, "addTuplet");
+		var actual=fraction(targetdur, 64 );
+		var ratio=fraction(tupletN, tupletD);
+		var tuplet=cursor.addTuplet(ratio, actual);
+		// tuplet.bracketType=TupletBracketType.SHOW_BRACKET; // les crochets
+		// tuplet.bracketType=1; // les crochets
+		//tuplet.numberType=TupletNumberType.SHOW_RELATION; // // le ratio
+        endCmd(curScore, "addTuplet");
 
         // 3) re-adding the notes
         for (var i = 0; i < targets.length; i++) {
             var target = targets[i];
             //var target = chords[i]; // TEST - DIRECTEMENT UTILISER LES NOTES MEMEORISEES --> KO (du moins sur les durées)
-			var tick=cursor.tick;
+            var tick = cursor.tick;
             //console.log("Target " + i + ": " + target.duration.numerator + "/" + target.duration.denominator + ", notes: " + (target.notes ? target.notes.length : 0));
 
             if (target.notes && target.notes.length > 0) {
@@ -612,16 +662,16 @@ MuseScore {
                 for (var j = 0; j < target.notes.length; j++) {
                     pitches.push(target.notes[j].pitch);
                 }
-                startCmd(curScore,"restToChord"); //DEBUG
+                startCmd(curScore, "restToChord"); //DEBUG
                 NoteHelper.restToChord(cursor.element, pitches, true); // with keepRestDuration=true
-				endCmd(curScore,"restToChord"); // DEBUG
+                endCmd(curScore, "restToChord"); // DEBUG
             }
 
             //console.log("note duration modification: "+durationTo64(cursor.element.duration)+" --> "+durationTo64(target.duration));
-            startCmd(curScore,"adapt duration"); //DEBUG
-			cursor.rewindToTick(tick);
+            startCmd(curScore, "adapt duration"); //DEBUG
+            cursor.rewindToTick(tick);
             cursorToDuration(cursor, durationTo64(target.duration));
-            endCmd(curScore,"adapt duration"); // DEBUG
+            endCmd(curScore, "adapt duration"); // DEBUG
 
             moveNext(cursor);
         }
@@ -647,7 +697,7 @@ MuseScore {
                 elements.push(e);
             }
         };
-        startCmd(curScore,"removeTuplet");
+        startCmd(curScore, "removeTuplet");
         // Fonctionne
         //removeElement(tuplet);
 
@@ -655,7 +705,7 @@ MuseScore {
             console.log("Tuplets elements: " + elements[i].userName() + " with duration " + durationTo64(elements[i].duration));
         }
 
-        endCmd(curScore,"removeTuplet");
+        endCmd(curScore, "removeTuplet");
 
     }
 
@@ -927,11 +977,11 @@ MuseScore {
         var sigNum = sigTo64(sig) + increment;
         console.log("Increasing from " + sigTo64(sig) + " to " + sigNum);
 
-        startCmd(cursor.score,"appendRest");
+        startCmd(cursor.score, "appendRest");
         console.log("CMD: Modify timesigActual");
         measure.timesigActual = fraction(sigNum, 64);
         debugMeasureLength(measure);
-        endCmd(cursor.score,"appendRest");
+        endCmd(cursor.score, "appendRest");
 
         /*var tick = Math.min(measure.lastSegment.tick, cursor.score.lastSegment.tick - 1); // BUG in MS, One cannot rewind to the last score tick
 
@@ -1012,10 +1062,10 @@ MuseScore {
 
         // 4) Adapting the measure length
         var target = sigA - increment;
-        startCmd(cursor.score,"removeRest");
+        startCmd(cursor.score, "removeRest");
         console.log("CMD: Modify timesigActual");
         measure.timesigActual = fraction(target, 64);
-        endCmd(cursor.score,"removeRest");
+        endCmd(cursor.score, "removeRest");
         debugMeasureLength(measure);
 
     }
@@ -1227,9 +1277,9 @@ MuseScore {
         if (last.tick <= first.tick) {
             // Working at the end of the measure, we don't copy/paste
             console.log("-->No. Clear selection.");
-            startCmd(cursor.score,"clear selection");
+            startCmd(cursor.score, "clear selection");
             cursor.score.selection.clear();
-            endCmd(cursor.score,"clear selection");
+            endCmd(cursor.score, "clear selection");
             return false;
         }
 
@@ -1239,9 +1289,9 @@ MuseScore {
             tick++; // Bug in MS with the end of score ticks
         console.log("--> Yes. Selecting from " + first.tick + "/" + cursor.staffIdx + " to " + tick + "/" + cursor.staffIdx);
         var res = false;
-        startCmd(cursor.score,"select range");
+        startCmd(cursor.score, "select range");
         res = cursor.score.selection.selectRange(first.tick, tick, cursor.staffIdx, cursor.staffIdx + 1);
-        endCmd(cursor.score,"select range");
+        endCmd(cursor.score, "select range");
 
         return res;
 
@@ -1289,6 +1339,68 @@ MuseScore {
         text: "--"
     }
 
+    Dialog {
+        id: manualTupletDefinitionDialog
+        title: "Define tuplet..."
+        //modal: true
+        standardButtons: Dialog.Save | Dialog.Cancel
+
+        property var chords
+        property var duration
+        property var measureType
+		property alias tupletN : txtTupletN.text
+		property alias tupletD : txtTupletD.text
+
+        RowLayout {
+			Item {
+				Layout.fillWidth: true
+			}
+            Label {
+                text: "Ratio:"
+            }
+
+            TextField {
+                id: txtTupletN
+				validator: IntValidator{bottom: 2; top: 99;}
+                Layout.fillWidth: false
+				Layout.minimumWidth: 40
+				Layout.preferredWidth: Layout.minimumWidth
+                placeholderText: "3"
+                maximumLength: 2
+				selectByMouse: true
+
+            }
+            Label {
+                text: "/"
+            }
+
+            TextField {
+                id: txtTupletD
+				validator: IntValidator{bottom: 2; top: 99;}
+                Layout.fillWidth: false
+				Layout.minimumWidth: 40
+				Layout.preferredWidth: Layout.minimumWidth
+                placeholderText: "2"
+                maximumLength: 2
+				selectByMouse: true
+            }
+			Item {
+				Layout.fillWidth: true
+			}
+
+        }
+
+        onAccepted: {
+            var tN = parseInt(txtTupletN.text);
+            var tD = parseInt(txtTupletD.text);
+            console.log("==> " + tN+":"+tD);
+            manualTupletDefinitionDialog.close();
+            convertChordsToTuplets_Exectute(chords, duration,measureType, tN, tD);
+        }
+        onRejected: manualTupletDefinitionDialog.close();
+
+    }
+
     function debugMeasureLength(measure) {
         console.log(measure.timesigNominal.str + " // " + measure.timesigActual.str);
     }
@@ -1299,6 +1411,17 @@ MuseScore {
             ((segment !== null) ? segment.segmentType : "null") +
             " (with " + ((el !== null) ? el.userName() : "null") +
             " on track " + track + ")");
+    }
+
+
+    function startCmd(score, comment) {
+        score.startCmd();
+        console.log(">>>>>>>>>> START CMD " + (comment ? ("(" + comment + ") ") : "") + ">>>>>>>>>>>>>>>>>");
+    }
+
+    function endCmd(score, comment) {
+        score.endCmd();
+        console.log("<<<<<<<<<< END CMD " + (comment ? ("(" + comment + ") ") : "") + "<<<<<<<<<<<<<<<<<");
     }
 
     function debugO(label, element, excludes) {
@@ -1325,14 +1448,4 @@ MuseScore {
             console.log(label + ": " + element);
         }
     }
-	
-	function startCmd(score,comment) {
-		score.startCmd();
-		console.log(">>>>>>>>>> START CMD "+(comment?("("+comment+") "):"")+">>>>>>>>>>>>>>>>>");
-	}
-	
-	function endCmd(score,comment) {
-		score.endCmd();
-		console.log("<<<<<<<<<< END CMD "+(comment?("("+comment+") "):"")+"<<<<<<<<<<<<<<<<<");
-	}
 }

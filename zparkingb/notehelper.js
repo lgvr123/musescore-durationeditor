@@ -172,6 +172,7 @@ function buildPitchedNote(noteName, accidental) {
 function restToNote(rest, toNote, keepRestDuration) {
     if (rest.type != Element.REST)
         return;
+	var duration;
 
     if (toNote === parseInt(toNote))
         toNote = {
@@ -181,15 +182,23 @@ function restToNote(rest, toNote, keepRestDuration) {
         };
 		
 	// For compatibility
-	if (typeof keepRestDuration === 'undefined') keepRestDuration=false;
+	if (typeof keepRestDuration === 'undefined')
+	    duration = undefined;
+	else if (typeof keepRestDuration === 'boolean') {
+	    if (keepRestDuration) {
+	        duration = rest.duration;
+	    }
 
-    //console.log("==ON A REST==");
+	} else
+	    duration = keepRestDuration;
+
+	//console.log("==ON A REST==");
     var cur_time = rest.parent.tick; // getting rest's segment's tick
     var oCursor = curScore.newCursor();
 	oCursor.track=rest.track;
 
-	if (keepRestDuration) {
-		oCursor.setDuration(rest.duration.numerator, rest.duration.denominator);
+	if (duration) {
+		oCursor.setDuration(duration.numerator, duration.denominator);
 	}
 	oCursor.rewindToTick(cur_time);
     oCursor.addNote(toNote.pitch);
