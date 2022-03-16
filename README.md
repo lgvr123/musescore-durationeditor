@@ -5,28 +5,51 @@ Where MuseScore works in a *vertical* approach (inserting a note in a measure wi
 
 ## Demo ##
 ![Duration Editor in action](/demo/demo.gif)
+![Duration Editor in action](/demo/demotuplets.gif)
 
-## New in 1.2.0 ##
-* _Add Tie_ feature: 
-	* select a rest, and the "Add tie" button will copy the previous chord into that rest and tie them together.
-	* select a chord, and the "Add tie" button will copy it to an immediately following rest and tie them together.
+
+## New in 1.3.0 beta1
+### New
+* Tuplets removal:  convert tuplets to regular chords/notes
+
+### Improved
+* Tuplets insert: convert regular chords/notes to tuplets 
+* Core functions: better handling of non-4/4 measures
+
+## Remarks
+* This is WORK IN PROGRESS. For a stable version, please prefer the [release 1.2.0](https://github.com/lgvr123/musescore-durationeditor/releases/tag/1.2.0 "release 1.2.0").
+
+
 ## Features ##
-All those feature are working 
-* at the **measure** and **staff-level** (except the _Add tie_ function which is cross-measure), 
-* without impacting the next notes of the measure (they will be moved accordingly), 
-* without impacting the other staves
 
 ### Features ###
 * Change any note duration, 
-* Change/Add/Remove the notes dots
-* Insert rests
-* Delete notes 
-* Add ties between chords and following rests
-* All the actions are undoable (see remark below)
+* Change/Add/Remove the notes dots,
+* Insert rests,
+* Delete notes, 
+* Add ties between chords and following rests, 
+* Tuplets insert: convert regular chords/notes to tuplets,
+* Tuplets removal: convert tuplets to regular chords/notes
 
-## NOTE that this plugin is BETA ##
-1. Due to the “sensible” nature of MuseScore’s API, and although having been thoroughly tested, you may fall into some limit cases where the plugin crashes MuseScore. No such cases have been detected since the version 1.0.1, but there is no warranty or whatsoever.
-2. All the actions are undoable. It will require up-to 2-3 undos before completely undo a action.
+### About the _Tie_ feature
+* select a rest, and the "Add tie" button will copy the previous chord into that rest and tie them together.
+* select a chord, and the "Add tie" button will copy it to an immediately following rest and tie them together.
+
+### About the _Tuplet_ feature
+* select any range of chords/notes, and the "Tuplet" button will transform these into a without impacting (i.e. adding rests) the following chord/notes.
+* select any note of a tuplet, and the "Tuplet" button will replace the tuplet with its chord/notes without impacting (i.e. "eating") the following chord/notes.
+
+### Remarks ###
+* All those feature are working 
+	* at the **measure** and **track-level** (except the _Add tie_ function which is cross-measure), 
+	* without impacting the next notes of the measure (they will be moved accordingly), 
+	* without impacting the other staves
+* All the actions are undoable. It will require up-to 2-3 undos before completely undoing a action.
+* The Insert and Remove tuplets 
+
+## Attention ##
+Due to the “sensible” nature of MuseScore’s API, and although having been thoroughly tested, you may fall into some limit cases where the plugin crashes MuseScore. No such cases have been detected since the version 1.0.1, but there is no warranty or whatsoever.
+
 
 ## And if you like this note-entry paradigm... ##
 The goal of that plugin is to demonstrate that there is another note-entry paradigm needed/possible in MuseScore.
