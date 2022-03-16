@@ -10,10 +10,10 @@ Where MuseScore works in a *vertical* approach (inserting a note in a measure wi
 
 ## New in 1.3.0 beta1
 ### New
-* Tuplets removal:  convert tuplets to regular chords/notes
+* Tuplets removal:  convert tuplets to consecutive notes/rests
+* Tuplets insert: convert consecutive notes/rests to tuplets 
 
 ### Improved
-* Tuplets insert: convert regular chords/notes to tuplets 
 * Core functions: better handling of non-4/4 measures
 
 ## Remarks
@@ -28,16 +28,16 @@ Where MuseScore works in a *vertical* approach (inserting a note in a measure wi
 * Insert rests,
 * Delete notes, 
 * Add ties between chords and following rests, 
-* Tuplets insert: convert regular chords/notes to tuplets,
-* Tuplets removal: convert tuplets to regular chords/notes
+* Tuplets insert: convert consecutive notes/rests to tuplets,
+* Tuplets removal: convert tuplets to consecutive notes/rests
 
 ### About the _Tie_ feature
 * select a rest, and the "Add tie" button will copy the previous chord into that rest and tie them together.
 * select a chord, and the "Add tie" button will copy it to an immediately following rest and tie them together.
 
 ### About the _Tuplet_ feature
-* select any range of chords/notes, and the "Tuplet" button will transform these into a without impacting (i.e. adding rests) the following chord/notes.
-* select any note of a tuplet, and the "Tuplet" button will replace the tuplet with its chord/notes without impacting (i.e. "eating") the following chord/notes.
+* select any range of consecutive chords/notes/rests, and the "Tuplet" button will transform these into a without impacting (i.e. adding rests) the following chord/notes.
+* select any note of a tuplet, and the "Tuplet" button will replace the tuplet with its notes/rests without impacting (i.e. "eating") the following notes/rests.
 
 ### Remarks ###
 * All those feature are working 
