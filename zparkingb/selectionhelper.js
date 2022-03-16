@@ -4,6 +4,7 @@
 /* v1.2.0 28/9/21 getChordsRestsFromCursor
 /* v1.2.1 2/10/21 corrected name of checktVersion
 /* v1.2.2 15/03/22 correction in getChordsRestsFromSelection
+/* v1.2.3 16/03/22 better handling of absence of opened score
 /**********************************************/
 
 // -----------------------------------------------------------------------
@@ -14,7 +15,7 @@ function checktVersion(expected) {
     return checkVersion(expected);
 }
 function checkVersion(expected) {
-    var version = "1.2.2";
+    var version = "1.2.3";
 
 	var aV = version.split('.').map(function (v) {return parseInt(v);});
 	var aE = (expected && (expected != null)) ? expected.split('.').map(function (v) {return parseInt(v);}) : [99];
@@ -37,6 +38,7 @@ function checkVersion(expected) {
  *      - element.type==Element.NOTE
  */
 function getNotesFromSelection() {
+	if (curScore==null || curScore.selection==null) return [];
     var selection = curScore.selection;
     var el = selection.elements;
     var notes = [];
@@ -57,6 +59,7 @@ function getNotesFromSelection() {
  *      - element.type==Element.REST
  */
 function getRestsFromSelection() {
+	if (curScore==null || curScore.selection==null) return [];
     var selection = curScore.selection;
     var el = selection.elements;
     var rests = [];
@@ -76,6 +79,7 @@ function getRestsFromSelection() {
  *      - element.type==Element.REST or Element.NOTE
  */
 function getNotesRestsFromSelection() {
+	if (curScore==null || curScore.selection==null) return [];
     var selection = curScore.selection;
     var el = selection.elements;
     var rests = [];
@@ -164,6 +168,7 @@ function getSegmentsFromSelection() {
  *      - element.type==Element.FINGERING
  */
 function getFingeringsFromSelection() {
+	if (curScore==null || curScore.selection==null) return [];
     var selection = curScore.selection;
     var el = selection.elements;
     var fingerings = [];
@@ -208,6 +213,7 @@ function getNotesFromCursor(oneNoteBySegment) {
  *
  */
 function getChordsFromCursor() {
+	if (curScore==null) return [];
     var score = curScore;
     var cursor = curScore.newCursor()
         var firstTick,
@@ -252,6 +258,7 @@ function getChordsFromCursor() {
 }
 
 function getChordsRestsFromCursor() {
+	if (curScore==null) return [];
     var score = curScore;
     var cursor = curScore.newCursor()
         var firstTick,
@@ -304,6 +311,7 @@ function getChordsRestsFromCursor() {
  *
  */
 function getRestsFromCursor() {
+	if (curScore==null) return [];
     var score = curScore;
     var cursor = curScore.newCursor()
         var firstTick,
@@ -348,6 +356,7 @@ function getRestsFromCursor() {
 }
 
 function getChordsFromCursor() {
+	if (curScore==null) return [];
     var score = curScore;
     var cursor = curScore.newCursor()
         var firstTick,
@@ -401,6 +410,7 @@ function getChordsFromCursor() {
  *
  */
 function getNotesRestsFromCursor(oneNoteBySegment) {
+	if (curScore==null) return [];
     var score = curScore;
     var cursor = curScore.newCursor()
         var firstTick,
@@ -465,6 +475,7 @@ function getNotesRestsFromCursor(oneNoteBySegment) {
  *
  */
 function getSegmentsFromCursor() {
+	if (curScore==null) return [];
     var score = curScore;
     var cursor = curScore.newCursor()
         cursor.rewind(Cursor.SELECTION_END);
@@ -487,6 +498,7 @@ function getSegmentsFromCursor() {
 }
 
 function getChordsRestsFromScore() {
+	if (curScore==null) return [];
     var score = curScore;
     var cursor = curScore.newCursor()
         var firstTick,

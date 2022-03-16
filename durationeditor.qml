@@ -213,7 +213,7 @@ MuseScore {
             imageHeight: imgHeight
             imagePadding: imgPadding
             // fillMode: Image.PreserveAspectCrop
-            ToolTip.text: "Tie rest to previous chord/Tie chord to next rest."
+            ToolTip.text: "Tie rest to preceding note/Tie note to following rest."
             onClicked: addTie()
         }
 
@@ -228,7 +228,7 @@ MuseScore {
                 imageHeight: imgHeight
                 imagePadding: imgPadding
                 // fillMode: Image.PreserveAspectCrop
-                ToolTip.text: "Convert regular chords to and from tuplets."
+                ToolTip.text: "Convert consecutive notes/rests to and from tuplets."
                 onClicked: addRemoveTupplet(false)
             }
             ImageButton {
@@ -441,7 +441,7 @@ MuseScore {
             console.log("REST ==> looking behind for a CHORD");
 
             if (!movePrev(cursor)) {
-                warningDialog.text = "Failed to tie the rest.\nCannot identify a chord to tie from.";
+                warningDialog.text = "Failed to tie the rest.\nCannot identify a note to tie from.";
                 warningDialog.open();
                 return;
             }
@@ -449,13 +449,13 @@ MuseScore {
             source = cursor.element;
 
             if (source === null) {
-                warningDialog.text = "Failed to tie the rest.\nCannot identify a chord to tie from.";
+                warningDialog.text = "Failed to tie the rest.\nCannot identify a note to tie from.";
                 warningDialog.open();
                 return;
             }
 
             if (source.type !== Element.CHORD) {
-                warningDialog.text = "Failed to tie the rest.\nThe selected rest must to preceded by a chord.";
+                warningDialog.text = "Failed to tie the rest.\nThe selected rest must to preceded by a note.";
                 warningDialog.open();
                 return;
             }
@@ -464,7 +464,7 @@ MuseScore {
             console.log("CHORD ==> looking forward for a REST");
             source = rest;
             if (!moveNext(cursor)) {
-                warningDialog.text = "Failed to tie the chord.\nCannot identify a rest to tie to.";
+                warningDialog.text = "Failed to tie the note.\nCannot identify a rest to tie to.";
                 warningDialog.open();
                 return;
             }
@@ -472,13 +472,13 @@ MuseScore {
             rest = cursor.element;
 
             if (rest === null) {
-                warningDialog.text = "Failed to tie the chord.\nCannot identify a rest to tie to.";
+                warningDialog.text = "Failed to tie the note.\nCannot identify a rest to tie to.";
                 warningDialog.open();
                 return;
             }
 
             if (rest.type !== Element.REST) {
-                warningDialog.text = "Failed to tie the chord.\nThe selected chord must to followed by a rest.";
+                warningDialog.text = "Failed to tie the note.\nThe selected note must to followed by a rest.";
                 warningDialog.open();
                 return;
             }
@@ -517,7 +517,7 @@ MuseScore {
             console.log("TUPLETS FOUND FROM SELECTION");
             if (ask) {
                 warningDialog.subtitle = "Tuplet conversion";
-                warningDialog.text = "Cannot perform a manual tuplet conversion for this selection.\nThe manual conversion only applies to regular chords.";
+                warningDialog.text = "Cannot perform a manual tuplet conversion for this selection.\nThe manual conversion only applies to non-tuplet consecutive notes/rests.";
                 warningDialog.open();
                 return;
             }
@@ -535,14 +535,14 @@ MuseScore {
 
             } else {
                 warningDialog.subtitle = "Tuplet conversion";
-                warningDialog.text = "Invalid selection.";
+                warningDialog.text = "Invalid selection.\nExpecting a selection of consecutive notes/rests.";
                 warningDialog.open();
                 return;
             }
 
         } else {
             warningDialog.subtitle = "Tuplet conversion";
-            warningDialog.text = "Invalid selection.";
+            warningDialog.text = "Invalid selection.\nExpecting a selection of consecutive notes/rests or of a tuplet.";
             warningDialog.open();
             return;
         }
@@ -779,6 +779,7 @@ MuseScore {
      * If the selection is containing incoherent elements (tuplet-based and non-tuplet-based elements, multiple tuplets elements, ...), "false" is returned.
      */
     function getTupletsFromSelection() {
+		if (curScore==null) return false;
         var selection = curScore.selection;
         var el = selection.elements;
         var tuplets = [];
@@ -1434,7 +1435,7 @@ MuseScore {
         RowLayout {
             anchors.fill: parent
 
-            Item { // spacer // DEBUG Item/Rectangle
+            Item { // spacer 
                 implicitHeight: 10
                 Layout.fillWidth: true
             }
