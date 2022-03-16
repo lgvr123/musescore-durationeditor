@@ -45,7 +45,7 @@ Where MuseScore works in a *vertical* approach (inserting a note in a measure wi
 	* without impacting the next notes of the measure (they will be moved accordingly), 
 	* without impacting the other staves
 * All the actions are undoable. It will require up-to 2-3 undos before completely undoing a action.
-* The Insert and Remove tuplets 
+* The Insert and Remove tuplets do not manage all the notes characteristics. Some of them might by lost when performing those actions.
 
 ## Attention ##
 Due to the “sensible” nature of MuseScore’s API, and although having been thoroughly tested, you may fall into some limit cases where the plugin crashes MuseScore. No such cases have been detected since the version 1.0.1, but there is no warranty or whatsoever.
