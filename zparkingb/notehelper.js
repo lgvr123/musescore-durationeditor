@@ -1,32 +1,39 @@
 /**********************
 /* Parking B - MuseScore - Note helper
-/* v1.0.4
+/* v1.0.5
 /* ChangeLog:
 /* 	- 22/7/21: Added restToNote and changeNote function
 /*  - 25/7/21: Managing of transposing instruments
 /*	- 5/9/21: v1.0.2 Improved support for transpositing instruments.
-/*	- 13/03/22: v1.0.4 Extra parameter to keep the rest duration when adding notes and chords. 
-/*	- 13/03/22: v1.0.4 New restToChords function. 
+/*	- 13/03/22: v1.0.4 Extra parameter to keep the rest duration when adding notes and chords.
+/*	- 13/03/22: v1.0.4 New restToChords function.
+/*	- 18/03/22: v1.0.5 restToNote and New restToChords accept now tpc1 and tpc2 values.
 /**********************************************/
 // -----------------------------------------------------------------------
 // --- Vesionning-----------------------------------------
 // -----------------------------------------------------------------------
 
 function checktVersion(expected) {
-	return checkVersion(expected);
+    return checkVersion(expected);
 }
 function checkVersion(expected) {
-	var version = "1.0.4";
+    var version = "1.0.5";
 
-	var aV = version.split('.').map(function (v) {return parseInt(v);});
-	var aE = (expected && (expected != null)) ? expected.split('.').map(function (v) {return parseInt(v);}) : [99];
-	if (aE.length == 0) aE = [99];
+    var aV = version.split('.').map(function (v) {
+        return parseInt(v);
+    });
+    var aE = (expected && (expected != null)) ? expected.split('.').map(function (v) {
+        return parseInt(v);
+    }) : [99];
+    if (aE.length == 0)
+        aE = [99];
 
-	for (var i = 0; (i < aV.length) && (i < aE.length); i++) {
-		if (!(aV[i] >= aE[i])) return false;
-	}
+    for (var i = 0; (i < aV.length) && (i < aE.length); i++) {
+        if (!(aV[i] >= aE[i]))
+            return false;
+    }
 
-	return true;
+    return true;
 }
 // -----------------------------------------------------------------------
 // --- Processing-----------------------------------------
@@ -172,7 +179,7 @@ function buildPitchedNote(noteName, accidental) {
 function restToNote(rest, toNote, keepRestDuration) {
     if (rest.type != Element.REST)
         return;
-	var duration;
+    var duration;
 
     if (toNote === parseInt(toNote))
         toNote = {
@@ -180,27 +187,27 @@ function restToNote(rest, toNote, keepRestDuration) {
             "concertPitch": false,
             "sharp_mode": true
         };
-		
-	// For compatibility
-	if (typeof keepRestDuration === 'undefined')
-	    duration = undefined;
-	else if (typeof keepRestDuration === 'boolean') {
-	    if (keepRestDuration) {
-	        duration = rest.duration;
-	    }
 
-	} else
-	    duration = keepRestDuration;
+    // For compatibility
+    if (typeof keepRestDuration === 'undefined')
+        duration = undefined;
+    else if (typeof keepRestDuration === 'boolean') {
+        if (keepRestDuration) {
+            duration = rest.duration;
+        }
 
-	//console.log("==ON A REST==");
+    } else
+        duration = keepRestDuration;
+
+    //console.log("==ON A REST==");
     var cur_time = rest.parent.tick; // getting rest's segment's tick
     var oCursor = curScore.newCursor();
-	oCursor.track=rest.track;
+    oCursor.track = rest.track;
 
-	if (duration) {
-		oCursor.setDuration(duration.numerator, duration.denominator);
-	}
-	oCursor.rewindToTick(cur_time);
+    if (duration) {
+        oCursor.setDuration(duration.numerator, duration.denominator);
+    }
+    oCursor.rewindToTick(cur_time);
     oCursor.addNote(toNote.pitch);
     oCursor.rewindToTick(cur_time);
     var chord = oCursor.element;
@@ -216,50 +223,54 @@ function restToNote(rest, toNote, keepRestDuration) {
     return note;
 }
 
-    function restToChord(rest, toNotes, keepRestDuration) {
-        if (rest.type != Element.REST)
-            return;
+function restToChord(rest, toNotes, keepRestDuration) {
+    if (rest.type != Element.REST)
+        return;
 
-        var notes = toNotes.map(function (n) {
-            if (n === parseInt(n)) {
-                return {
-                    "pitch": n,
-                    "concertPitch": false,
-                    "sharp_mode": true
-                };
-            } else {
-                return n;
-            }
-        });
+    var notes = toNotes.map(function (n) {
+        if (n === parseInt(n)) {
+            return {
+                "pitch": n,
+                "concertPitch": false,
+                "sharp_mode": true
+            };
+        } else {
+            return n;
+        }
+    });
 
-		
-		//console.log("Dealing with note "+0+": "+notes[0].pitch);
-		restToNote(rest, notes[0], keepRestDuration);
-		
-		for (var i = 1; i < notes.length; i++) {
-			var dest=notes[i];
-			//console.log("Dealing with note "+i+": "+dest.pitch);
-		    var cur_time = rest.parent.tick; // getting rest's segment's tick
-		    var oCursor = curScore.newCursor();
-			oCursor.track=rest.track;
-		    oCursor.rewindToTick(cur_time);
-		    oCursor.addNote(dest.pitch, true);  // addToChord=true
-		    oCursor.rewindToTick(cur_time);
-		    var chord = oCursor.element;
-			console.log(">>"+((chord!==null)?chord.userName():"null") + " ("+((chord!==null)?chord.notes.length:"/")+")");
-		    var note = chord.notes[i];
+    //console.log("Dealing with note "+0+": "+notes[0].pitch);
+    restToNote(rest, notes[0], keepRestDuration);
 
-		    //debugPitch(level_DEBUG,"Added note",note);
+    for (var i = 1; i < notes.length; i++) {
+        var dest = notes[i];
+        //console.log("Dealing with note "+i+": "+dest.pitch);
+        var cur_time = rest.parent.tick; // getting rest's segment's tick
+        var oCursor = curScore.newCursor();
+        oCursor.track = rest.track;
+        oCursor.rewindToTick(cur_time);
+        oCursor.addNote(dest.pitch, true); // addToChord=true
+        oCursor.rewindToTick(cur_time);
+        var chord = oCursor.element;
+        console.log(">>" + ((chord !== null) ? chord.userName() : "null") + " (" + ((chord !== null) ? chord.notes.length : "/") + ")");
+        var note = chord.notes[i];
 
-		    NoteHelper.changeNote(note, dest);
+        //debugPitch(level_DEBUG,"Added note",note);
 
-		}
+        NoteHelper.changeNote(note, dest);
 
-        return note;
     }
+
+    return note;
+}
 
 /**
  * @param toNote.pitch: the target pitch,
+
+ * @param toNote.tpc1, toNote.tpc2 : the target tpc, if known beforehand
+
+ * -- OR --
+
  * @param toNote.concertPitch: true|false, false means the note must be dispalyed as having that pitch.
  * For a Bb instrument, a pitch=60 (C), with concertPitch=false will be displayed as a C but be played as Bb.
  * With concertPitch=true, it will be played as a C and therefor displayed as a D.
@@ -271,34 +282,44 @@ function changeNote(note, toNote) {
         return;
     }
 
-    var sharp_mode = (toNote.sharp_mode) ? true : false;
-    var concertPitch = (toNote.concertPitch) ? true : false;
+    if (toNote.tpc1 !== undefined && toNote.tpc1 !== undefined) {
+		// tpc1 and tpc2 are defined ==> using them
+        note.tpc1 = toNote.tpc1;
+        note.tpc2 = toNote.tpc2;
 
-    //console.log("default is pitch: " + note.pitch + ", tpc: " + note.tpc1 + "/" + note.tpc2 + "/" + note.tpc);
-    //console.log("requested is pitch: " + ((toNote.pitch === undefined) ? "undefined" : toNote.pitch) +
-    //    ", tpc: " + ((toNote.tpc1 === undefined) ? "undefined" : toNote.tpc1) + "/" + ((toNote.tpc2 === undefined) ? "undefined" : toNote.tpc2));
+    } else {
+		// tpc1 and tpc2 are not defined ==> computing them
 
-    if (!concertPitch) {
-        // We need to align the pitch, beacause the specified pitched is the score pitch and non the concert pitch²
-        var dtpc = note.tpc2 - note.tpc1;
-        var dpitch = deltaTpcToPitch(note.tpc1, note.tpc2);
+        var sharp_mode = (toNote.sharp_mode) ? true : false;
+        var concertPitch = (toNote.concertPitch) ? true : false;
 
-        note.pitch += dpitch;
+        //console.log("default is pitch: " + note.pitch + ", tpc: " + note.tpc1 + "/" + note.tpc2 + "/" + note.tpc);
+        //console.log("requested is pitch: " + ((toNote.pitch === undefined) ? "undefined" : toNote.pitch) +
+        //    ", tpc: " + ((toNote.tpc1 === undefined) ? "undefined" : toNote.tpc1) + "/" + ((toNote.tpc2 === undefined) ? "undefined" : toNote.tpc2));
 
-        // basic approach. This will be correct but not all the time nice
-        note.tpc1 -= dtpc;
-        note.tpc2 -= dtpc;
+        if (!concertPitch) {
+            // We need to align the pitch, beacause the specified pitched is the score pitch and non the concert pitch²
+            var dtpc = note.tpc2 - note.tpc1;
+            var dpitch = deltaTpcToPitch(note.tpc1, note.tpc2);
+
+            note.pitch += dpitch;
+
+            // basic approach. This will be correct but not all the time nice
+            note.tpc1 -= dtpc;
+            note.tpc2 -= dtpc;
+
+        }
+
+        var tpc = getPreferredTpc(note.tpc1, sharp_mode);
+        if (tpc !== null)
+            note.tpc1 = tpc;
+
+        //delta = toNote.pitch - 60;
+        var tpc = getPreferredTpc(note.tpc2, sharp_mode);
+        if (tpc !== null)
+            note.tpc2 = tpc;
 
     }
-
-    var tpc = getPreferredTpc(note.tpc1, sharp_mode);
-    if (tpc !== null)
-        note.tpc1 = tpc;
-
-    //delta = toNote.pitch - 60;
-    var tpc = getPreferredTpc(note.tpc2, sharp_mode);
-    if (tpc !== null)
-        note.tpc2 = tpc;
 
     //console.log("After is pitch: " + note.pitch + ", tpc: " + note.tpc1 + "/" + note.tpc2 + "/" + note.tpc);
 
@@ -600,7 +621,7 @@ function tpcClass(tpc, name, accidental) {
     }
 
     this.toString = function () {
-        return this.raw+" "+this.accidental;
+        return this.raw + " " + this.accidental;
     };
 
     Object.freeze(this);
