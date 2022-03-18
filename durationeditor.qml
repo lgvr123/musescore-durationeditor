@@ -19,6 +19,7 @@ import "durationeditor"
 /* 	- 1.3.0.beta1: Improved rest augmentation
 /* 	- 1.3.0.beta1: AddTuplet finalization
 /* 	- 1.3.0.beta1: RemoveTuplet
+/* 	- 1.3.0.beta2: Paste correct accidentals
 /**********************************************/
 
 MuseScore {
@@ -27,7 +28,7 @@ MuseScore {
     version: "1.3.0"
     readonly property var pluginName: "Duration Editor"
     readonly property var selHelperVersion: "1.2.2"
-    readonly property var noteHelperVersion: "1.0.4"
+    readonly property var noteHelperVersion: "1.0.5"
 
     readonly property var debug: false
 
@@ -40,212 +41,224 @@ MuseScore {
     readonly property var imgHeight: 32
     readonly property var imgPadding: 8
 
-    Flow {
-        id: layButtons
+    ColumnLayout {
+        // anchors.fill: parent
+        width: parent.width
+        y: parent.y
+        Flow {
+            id: layButtons
+            Layout.fillWidth: true
+            // anchors.fill: parent
+            anchors.margins: 4
+            spacing: 10
 
-        anchors.fill: parent
-        anchors.margins: 4
-        spacing: 10
-
-        ImageButton {
-            imageSource: "ronde.svg"
-            imageHeight: imgHeight
-            imagePadding: imgPadding
-            ToolTip.text: "Change to Whole/Semibreve\nSHIFT: insert a rest"
-            MouseArea {
-                anchors.fill: parent
-                onPressed: {
-                    if ((mouse.button == Qt.LeftButton) && (mouse.modifiers & Qt.ShiftModifier)) {
-                        insertRest(64);
-                    } else {
-                        setDuration(64);
-                    }
-                }
-            }
-        }
-
-        ImageButton {
-            imageSource: "blanche.svg"
-            imageHeight: imgHeight
-            imagePadding: imgPadding
-            ToolTip.text: "Change to Half/Minim\nSHIFT: insert a rest"
-            MouseArea {
-                anchors.fill: parent
-                onPressed: {
-                    if ((mouse.button == Qt.LeftButton) && (mouse.modifiers & Qt.ShiftModifier)) {
-                        insertRest(32);
-                    } else {
-                        setDuration(32);
-                    }
-                }
-            }
-        }
-
-        ImageButton {
-            imageSource: "noire.svg"
-            imageHeight: imgHeight
-            imagePadding: imgPadding
-            ToolTip.text: "Change to Quarter/Crotchet\nSHIFT: insert a rest"
-            MouseArea {
-                anchors.fill: parent
-                onPressed: {
-                    if ((mouse.button == Qt.LeftButton) && (mouse.modifiers & Qt.ShiftModifier)) {
-                        insertRest(16);
-                    } else {
-                        setDuration(16);
-                    }
-                }
-            }
-        }
-
-        ImageButton {
-            imageSource: "croche.svg"
-            imageHeight: imgHeight
-            imagePadding: imgPadding
-            ToolTip.text: "Change to Eighth/Quaver\nSHIFT: insert a rest"
-            MouseArea {
-                anchors.fill: parent
-                onPressed: {
-                    if ((mouse.button == Qt.LeftButton) && (mouse.modifiers & Qt.ShiftModifier)) {
-                        insertRest(8);
-                    } else {
-                        setDuration(8);
-                    }
-                }
-            }
-        }
-
-        ImageButton {
-            imageSource: "double.svg"
-            imageHeight: imgHeight
-            imagePadding: imgPadding
-            ToolTip.text: "Change to Sixteenth/Semiquaver\nSHIFT: insert a rest"
-            MouseArea {
-                anchors.fill: parent
-                onPressed: {
-                    if ((mouse.button == Qt.LeftButton) && (mouse.modifiers & Qt.ShiftModifier)) {
-                        insertRest(4);
-                    } else {
-                        setDuration(4);
-                    }
-                }
-            }
-        }
-
-        ImageButton {
-            imageSource: "triple.svg"
-            imageHeight: imgHeight
-            imagePadding: imgPadding
-            ToolTip.text: "Change to Thirty-second/Demisemiquaver\nSHIFT: insert a rest"
-            MouseArea {
-                anchors.fill: parent
-                onPressed: {
-                    if ((mouse.button == Qt.LeftButton) && (mouse.modifiers & Qt.ShiftModifier)) {
-                        insertRest(2);
-                    } else {
-                        setDuration(2);
-                    }
-                }
-            }
-        }
-
-        ImageButton {
-            imageSource: "quadruple.svg"
-            imageHeight: imgHeight
-            imagePadding: imgPadding
-            ToolTip.text: "Change to Sixty-fourth/Hemidemisemiquaver\nSHIFT: insert a rest"
-            MouseArea {
-                anchors.fill: parent
-                onPressed: {
-                    if ((mouse.button == Qt.LeftButton) && (mouse.modifiers & Qt.ShiftModifier)) {
-                        insertRest(1);
-                    } else {
-                        setDuration(1);
-                    }
-                }
-            }
-        }
-
-        ImageButton {
-            imageSource: "dot.svg"
-            imageHeight: imgHeight
-            imagePadding: imgPadding
-            ToolTip.text: "Dot"
-            onClicked: setDot(1.5)
-        }
-
-        ImageButton {
-            imageSource: "dot2.svg"
-            imageHeight: imgHeight
-            imagePadding: imgPadding
-            ToolTip.text: "Dubble dot"
-            onClicked: setDot(1.75)
-        }
-
-        ImageButton {
-            imageSource: "dot3.svg"
-            imageHeight: imgHeight
-            imagePadding: imgPadding
-            ToolTip.text: "Triple dot"
-            onClicked: setDot(1.875)
-        }
-
-        ImageButton {
-            imageSource: "dot4.svg"
-            imageHeight: imgHeight
-            imagePadding: imgPadding
-            ToolTip.text: "Quadruple dot"
-            onClicked: setDot(1.9375)
-        }
-
-        ImageButton {
-            imageSource: "remove.svg"
-            imageHeight: imgHeight
-            imagePadding: imgPadding
-            ToolTip.text: "Delete"
-            onClicked: setDuration(0)
-        }
-
-        ImageButton {
-            id: btnTie
-            // imageSource: "qrc:///data/icons/note-tie.svg"
-            imageSource: "tie.svg"
-            imageHeight: imgHeight
-            imagePadding: imgPadding
-            // fillMode: Image.PreserveAspectCrop
-            ToolTip.text: "Tie rest to preceding note/Tie note to following rest."
-            onClicked: addTie()
-        }
-
-        Item {
-            // height: btnTuplet.height
-            height: imgHeight
-            // width: btnTuplet.width+btnManualTuplet.width
-            width: 50
             ImageButton {
-                id: btnTuplet
-                imageSource: "tuplets.svg"
+                imageSource: "ronde.svg"
+                imageHeight: imgHeight
+                imagePadding: imgPadding
+                ToolTip.text: "Change to Whole/Semibreve\nSHIFT: insert a rest"
+                MouseArea {
+                    anchors.fill: parent
+                    onPressed: {
+                        if ((mouse.button == Qt.LeftButton) && (mouse.modifiers & Qt.ShiftModifier)) {
+                            insertRest(64);
+                        } else {
+                            setDuration(64);
+                        }
+                    }
+                }
+            }
+
+            ImageButton {
+                imageSource: "blanche.svg"
+                imageHeight: imgHeight
+                imagePadding: imgPadding
+                ToolTip.text: "Change to Half/Minim\nSHIFT: insert a rest"
+                MouseArea {
+                    anchors.fill: parent
+                    onPressed: {
+                        if ((mouse.button == Qt.LeftButton) && (mouse.modifiers & Qt.ShiftModifier)) {
+                            insertRest(32);
+                        } else {
+                            setDuration(32);
+                        }
+                    }
+                }
+            }
+
+            ImageButton {
+                imageSource: "noire.svg"
+                imageHeight: imgHeight
+                imagePadding: imgPadding
+                ToolTip.text: "Change to Quarter/Crotchet\nSHIFT: insert a rest"
+                MouseArea {
+                    anchors.fill: parent
+                    onPressed: {
+                        if ((mouse.button == Qt.LeftButton) && (mouse.modifiers & Qt.ShiftModifier)) {
+                            insertRest(16);
+                        } else {
+                            setDuration(16);
+                        }
+                    }
+                }
+            }
+
+            ImageButton {
+                imageSource: "croche.svg"
+                imageHeight: imgHeight
+                imagePadding: imgPadding
+                ToolTip.text: "Change to Eighth/Quaver\nSHIFT: insert a rest"
+                MouseArea {
+                    anchors.fill: parent
+                    onPressed: {
+                        if ((mouse.button == Qt.LeftButton) && (mouse.modifiers & Qt.ShiftModifier)) {
+                            insertRest(8);
+                        } else {
+                            setDuration(8);
+                        }
+                    }
+                }
+            }
+
+            ImageButton {
+                imageSource: "double.svg"
+                imageHeight: imgHeight
+                imagePadding: imgPadding
+                ToolTip.text: "Change to Sixteenth/Semiquaver\nSHIFT: insert a rest"
+                MouseArea {
+                    anchors.fill: parent
+                    onPressed: {
+                        if ((mouse.button == Qt.LeftButton) && (mouse.modifiers & Qt.ShiftModifier)) {
+                            insertRest(4);
+                        } else {
+                            setDuration(4);
+                        }
+                    }
+                }
+            }
+
+            ImageButton {
+                imageSource: "triple.svg"
+                imageHeight: imgHeight
+                imagePadding: imgPadding
+                ToolTip.text: "Change to Thirty-second/Demisemiquaver\nSHIFT: insert a rest"
+                MouseArea {
+                    anchors.fill: parent
+                    onPressed: {
+                        if ((mouse.button == Qt.LeftButton) && (mouse.modifiers & Qt.ShiftModifier)) {
+                            insertRest(2);
+                        } else {
+                            setDuration(2);
+                        }
+                    }
+                }
+            }
+
+            ImageButton {
+                imageSource: "quadruple.svg"
+                imageHeight: imgHeight
+                imagePadding: imgPadding
+                ToolTip.text: "Change to Sixty-fourth/Hemidemisemiquaver\nSHIFT: insert a rest"
+                MouseArea {
+                    anchors.fill: parent
+                    onPressed: {
+                        if ((mouse.button == Qt.LeftButton) && (mouse.modifiers & Qt.ShiftModifier)) {
+                            insertRest(1);
+                        } else {
+                            setDuration(1);
+                        }
+                    }
+                }
+            }
+
+            ImageButton {
+                imageSource: "dot.svg"
+                imageHeight: imgHeight
+                imagePadding: imgPadding
+                ToolTip.text: "Dot"
+                onClicked: setDot(1.5)
+            }
+
+            ImageButton {
+                imageSource: "dot2.svg"
+                imageHeight: imgHeight
+                imagePadding: imgPadding
+                ToolTip.text: "Dubble dot"
+                onClicked: setDot(1.75)
+            }
+
+            ImageButton {
+                imageSource: "dot3.svg"
+                imageHeight: imgHeight
+                imagePadding: imgPadding
+                ToolTip.text: "Triple dot"
+                onClicked: setDot(1.875)
+            }
+
+            ImageButton {
+                imageSource: "dot4.svg"
+                imageHeight: imgHeight
+                imagePadding: imgPadding
+                ToolTip.text: "Quadruple dot"
+                onClicked: setDot(1.9375)
+            }
+
+            ImageButton {
+                imageSource: "remove.svg"
+                imageHeight: imgHeight
+                imagePadding: imgPadding
+                ToolTip.text: "Delete"
+                onClicked: setDuration(0)
+            }
+
+            ImageButton {
+                id: btnTie
+                // imageSource: "qrc:///data/icons/note-tie.svg"
+                imageSource: "tie.svg"
                 imageHeight: imgHeight
                 imagePadding: imgPadding
                 // fillMode: Image.PreserveAspectCrop
-                ToolTip.text: "Convert consecutive notes/rests to and from tuplets."
-                onClicked: addRemoveTupplet(false)
+                ToolTip.text: "Tie rest to preceding note/Tie note to following rest."
+                onClicked: addTie()
             }
-            ImageButton {
-                id: btnManualTuplet
-                x: btnTuplet.x + btnTuplet.width
-                y: btnTuplet.y
-                imageSource: "arrowbutton.svg"
-                imageHeight: 16
-                implicitHeight: btnTuplet.height
-                imagePadding: 2
-                //fillMode: Image.PreserveAspectCrop
-                ToolTip.text: "Manual conversion to tuplets."
-                onClicked: addRemoveTupplet(true)
-            }
-        }
 
-    }
+            Item {
+                // height: btnTuplet.height
+                height: imgHeight
+                // width: btnTuplet.width+btnManualTuplet.width
+                width: 50
+                ImageButton {
+                    id: btnTuplet
+                    imageSource: "tuplets.svg"
+                    imageHeight: imgHeight
+                    imagePadding: imgPadding
+                    // fillMode: Image.PreserveAspectCrop
+                    ToolTip.text: "Convert consecutive notes/rests to and from tuplets."
+                    onClicked: addRemoveTupplet(false)
+                }
+                ImageButton {
+                    id: btnManualTuplet
+                    x: btnTuplet.x + btnTuplet.width
+                    y: btnTuplet.y
+                    imageSource: "arrowbutton.svg"
+                    imageHeight: 16
+                    implicitHeight: btnTuplet.height
+                    imagePadding: 2
+                    //fillMode: Image.PreserveAspectCrop
+                    ToolTip.text: "Manual conversion to tuplets."
+                    onClicked: addRemoveTupplet(true)
+                }
+            }
+        } // flow
+        /*SmallCheckBox {
+            id: chkCrossVoice
+            boxWidth: 20
+            text: "Cross voices edition"
+            ToolTip.text: "Treat all the voices has one"
+            checked: false
+        }*/
+
+    } // ColumnLayout
 
     onRun: {
 
@@ -490,7 +503,13 @@ MuseScore {
         console.log("Got a source at " + source.parent.tick + " and a dest at " + rest.parent.tick);
         var notes = [];
         for (var i = 0; i < source.notes.length; i++) {
-            notes.push(source.notes[i].pitch);
+            // notes.push(source.notes[i].pitch);
+            var n = {
+                "pitch": source.notes[i].pitch,
+                "tpc1": source.notes[i].tpc1,
+                "tpc2": source.notes[i].tpc2
+            };
+            notes.push(n);
         }
 
         // Transforming the rest into the notes
@@ -553,13 +572,15 @@ MuseScore {
         var measure = chords[0].parent.parent;
 
         var duration = 0;
-		var samedur=0;
+        var samedur = 0;
         for (var i = 0; i < chords.length; i++) {
-			var dur=durationTo64(chords[i].duration);
+            var dur = durationTo64(chords[i].duration);
             duration += dur;
             console.log("To tuplets elements: " + chords[i].userName() + " with duration " + dur);
-			if (samedur==0) samedur=dur;
-			else  if ((samedur>0) && (samedur!==dur)) samedur=-1;
+            if (samedur == 0)
+                samedur = dur;
+            else if ((samedur > 0) && (samedur !== dur))
+                samedur = -1;
         }
 
         // var measureType = measure.timesigActual.denominator;
@@ -570,10 +591,11 @@ MuseScore {
 
         var tupletN = null;
         var tupletD = null;
-		
+
         var nums = [3, 5, 7, 9, 4, 6, 8];
-		// En x/8 si j'ai 2 notes sélectionnées, de même durée, j'autorise aussi à faire des 2:3
-		if ((chords.length==2) && (measureType == 8) && (samedur>0)) nums.unshift(2);
+        // En x/8 si j'ai 2 notes sélectionnées, de même durée, j'autorise aussi à faire des 2:3
+        if ((chords.length == 2) && (measureType == 8) && (samedur > 0))
+            nums.unshift(2);
 
         for (var i = 0; i < nums.length; i++) {
             var n = nums[i];
@@ -742,7 +764,13 @@ MuseScore {
             if (target.notes && target.notes.length > 0) {
                 var pitches = [];
                 for (var j = 0; j < target.notes.length; j++) {
-                    pitches.push(target.notes[j].pitch);
+                    // pitches.push(target.notes[j].pitch);
+                    var n = {
+                        "pitch": target.notes[j].pitch,
+                        "tpc1": target.notes[j].tpc1,
+                        "tpc2": target.notes[j].tpc2
+                    };
+                    pitches.push(n);
                 }
                 startCmd(curScore, "restToChord"); //DEBUG
                 NoteHelper.restToChord(cursor.element, pitches, true); // with keepRestDuration=true
@@ -779,7 +807,8 @@ MuseScore {
      * If the selection is containing incoherent elements (tuplet-based and non-tuplet-based elements, multiple tuplets elements, ...), "false" is returned.
      */
     function getTupletsFromSelection() {
-		if (curScore==null) return false;
+        if (curScore == null)
+            return false;
         var selection = curScore.selection;
         var el = selection.elements;
         var tuplets = [];
@@ -1368,6 +1397,7 @@ MuseScore {
         console.log("--> Yes. Selecting from " + first.tick + "/" + cursor.staffIdx + " to " + tick + "/" + cursor.staffIdx);
         var res = false;
         startCmd(cursor.score, "select range");
+        // TODO 17/3/22 Ce select range n'est sélectionne toutes les voix (ce n'est pas correct)
         res = cursor.score.selection.selectRange(first.tick, tick, cursor.staffIdx, cursor.staffIdx + 1);
         endCmd(cursor.score, "select range");
 
@@ -1435,7 +1465,7 @@ MuseScore {
         RowLayout {
             anchors.fill: parent
 
-            Item { // spacer 
+            Item { // spacer
                 implicitHeight: 10
                 Layout.fillWidth: true
             }
