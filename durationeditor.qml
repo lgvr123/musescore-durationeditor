@@ -20,6 +20,7 @@ import "durationeditor"
 /* 	- 1.3.0.beta1: AddTuplet finalization
 /* 	- 1.3.0.beta1: RemoveTuplet
 /* 	- 1.3.0.beta2: Paste correct accidentals
+/* 	- 1.3.0.beta2: SetDurationXyz fonctionne correctement en multi-voix: toutes les voix sont mises à jour dans tous les cas
 /**********************************************/
 
 MuseScore {
@@ -250,13 +251,13 @@ MuseScore {
                 }
             }
         } // flow
-        /*SmallCheckBox {
+        SmallCheckBox {
             id: chkCrossVoice
             boxWidth: 20
             text: "Cross voices edition"
             ToolTip.text: "Treat all the voices has one"
             checked: false
-        }*/
+        }
 
     } // ColumnLayout
 
@@ -373,8 +374,28 @@ MuseScore {
             // 3) on adapte la durée de la note
             cursor.rewindToTick(cur_time);
             cursorToDuration(cursor, newDuration);
-
-            // 3) On fait le paste
+			
+			// 4) s'occuper des autres voix (uniquement quand la durée augmente)
+			// 1.3.0
+			var t_cursor = cursor.score.newCursor();
+			t_cursor.rewindToTick(cur_time);
+			var seg = t_cursor.segment;
+			console.log("About to adapt others for tracks "+(cursor.staffIdx * 4)+ " to "+((cursor.staffIdx + 1) * 4));
+			for (var t = cursor.staffIdx * 4; t < (cursor.staffIdx + 1) * 4; t++) {
+				console.log("adapting others at track "+t);
+			    if (t === element.track)
+			        continue; // on a déjà traité celui-là
+			    var t_el = seg.elementAt(t);
+			    if (t_el === null)
+			        continue; // rien sur la voie t à ce tick
+			    var t_dur = durationTo64(t_el.duration);
+			    var t_newdur = t_dur + increment;
+				console.log("adapting others from "+t_dur+" to "+t_newdur);
+			    t_cursor.track = t;
+			    cursorToDuration(t_cursor, t_newdur);
+			}
+			
+            // 5) On fait le paste
             if (doCutPaste) {
                 cursor.rewindToTick(cur_time);
                 cursor.next();
@@ -961,6 +982,20 @@ MuseScore {
             } else
                 chords = [];
         }
+		
+		// on trie par tick puis par voie
+		chords=chords.sort(function(a,b) {
+			if (a.parent.tick!==b.parent.tick) {
+				return a.parent.tick-b.parent.tick;
+			} else {
+				return a.track-b.track;
+			};
+		});
+		
+		// for(var i=0;i<chords.length;i++) {
+			// var el=chords[i];
+			// console.log(el.track+": "+el.parent.tick+": "+el.userName());
+		// }
 
         return chords;
     }
@@ -1351,6 +1386,11 @@ MuseScore {
 
     }
 
+    /**
+     * Sélectionne la fin mesure à partir du curseur, y compris (include=true) ou non.
+     * @return true|false si la sélection a pu être faite
+     *
+     */
     function selectRemaingInMeasure(cursor, include) {
         var measure = cursor.measure;
         //var first = cursor.segment.nextInMeasure;
@@ -1394,11 +1434,35 @@ MuseScore {
         var tick = last.tick;
         if (tick == cursor.score.lastSegment.tick)
             tick++; // Bug in MS with the end of score ticks
-        console.log("--> Yes. Selecting from " + first.tick + "/" + cursor.staffIdx + " to " + tick + "/" + cursor.staffIdx);
-        var res = false;
         startCmd(cursor.score, "select range");
-        // TODO 17/3/22 Ce select range n'est sélectionne toutes les voix (ce n'est pas correct)
-        res = cursor.score.selection.selectRange(first.tick, tick, cursor.staffIdx, cursor.staffIdx + 1);
+        var res = cursor.score.selection.selectRange(first.tick, tick, cursor.staffIdx, cursor.staffIdx + 1);
+		// 19/3/22 tentative, mais ne fonctionne pas
+		/*
+        cursor.score.selection.clear();
+        var curstmp = cursor.score.newCursor();
+        var firstTrack = (chkCrossVoice.checked) ? (cursor.staffIdx * 4) : cursor.track;
+        var lastTrack = (chkCrossVoice.checked) ? (cursor.staffIdx * 4 + 3) : cursor.track;
+        console.log("--> Yes. Selecting from " + first.tick + "/" + firstTrack + " to " + tick + "/" + lastTrack);
+        console.log("Cross voice edition ? " + chkCrossVoice.checked);
+        curstmp.rewindToTick(first.tick);
+        var seg = curstmp.segment;
+        while (seg != null && seg.tick <= tick) {
+            for (var t = firstTrack; t <= lastTrack; t++) {
+                var el = seg.elementAt(t, true);
+                if (el!=null && el.type === Element.CHORD) {
+                    var cnotes = el.notes;
+                    for (var j = 0; j<cnotes.length; j++) {
+                        cursor.score.selection.select(cnotes[j]);
+                        console.log("adding "+cnotes[j].userName()+" ("+el.parent.tick+") to selection");
+                    }
+                } else if (el!=null) {
+                        console.log("adding "+el.userName()+" ("+el.parent.tick+") to selection");
+                    cursor.score.selection.select(el);
+                }
+            }
+            seg = seg.next;
+        }
+*/
         endCmd(cursor.score, "select range");
 
         return res;
