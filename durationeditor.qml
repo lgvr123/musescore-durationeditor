@@ -21,6 +21,7 @@ import "durationeditor"
 /* 	- 1.3.0.beta1: RemoveTuplet
 /* 	- 1.3.0.beta2: Paste correct accidentals
 /* 	- 1.3.0.beta2: SetDurationXyz fonctionne correctement en multi-voix: toutes les voix sont mises à jour dans tous les cas
+/* 	- 1.3.0.beta2: Tie on previous rest too
 /**********************************************/
 
 MuseScore {
@@ -374,27 +375,27 @@ MuseScore {
             // 3) on adapte la durée de la note
             cursor.rewindToTick(cur_time);
             cursorToDuration(cursor, newDuration);
-			
-			// 4) s'occuper des autres voix (uniquement quand la durée augmente)
-			// 1.3.0
-			var t_cursor = cursor.score.newCursor();
-			t_cursor.rewindToTick(cur_time);
-			var seg = t_cursor.segment;
-			console.log("About to adapt others for tracks "+(cursor.staffIdx * 4)+ " to "+((cursor.staffIdx + 1) * 4));
-			for (var t = cursor.staffIdx * 4; t < (cursor.staffIdx + 1) * 4; t++) {
-				console.log("adapting others at track "+t);
-			    if (t === element.track)
-			        continue; // on a déjà traité celui-là
-			    var t_el = seg.elementAt(t);
-			    if (t_el === null)
-			        continue; // rien sur la voie t à ce tick
-			    var t_dur = durationTo64(t_el.duration);
-			    var t_newdur = t_dur + increment;
-				console.log("adapting others from "+t_dur+" to "+t_newdur);
-			    t_cursor.track = t;
-			    cursorToDuration(t_cursor, t_newdur);
-			}
-			
+
+            // 4) s'occuper des autres voix (uniquement quand la durée augmente)
+            // 1.3.0
+            var t_cursor = cursor.score.newCursor();
+            t_cursor.rewindToTick(cur_time);
+            var seg = t_cursor.segment;
+            console.log("About to adapt others for tracks " + (cursor.staffIdx * 4) + " to " + ((cursor.staffIdx + 1) * 4));
+            for (var t = cursor.staffIdx * 4; t < (cursor.staffIdx + 1) * 4; t++) {
+                console.log("adapting others at track " + t);
+                if (t === element.track)
+                    continue; // on a déjà traité celui-là
+                var t_el = seg.elementAt(t);
+                if (t_el === null)
+                    continue; // rien sur la voie t à ce tick
+                var t_dur = durationTo64(t_el.duration);
+                var t_newdur = t_dur + increment;
+                console.log("adapting others from " + t_dur + " to " + t_newdur);
+                t_cursor.track = t;
+                cursorToDuration(t_cursor, t_newdur);
+            }
+
             // 5) On fait le paste
             if (doCutPaste) {
                 cursor.rewindToTick(cur_time);
@@ -497,22 +498,46 @@ MuseScore {
         else {
             console.log("CHORD ==> looking forward for a REST");
             source = rest;
-            if (!moveNext(cursor)) {
-                warningDialog.text = "Failed to tie the note.\nCannot identify a rest to tie to.";
-                warningDialog.open();
-                return;
+            rest = null;
+            if (moveNext(cursor)) {
+                var candidate = cursor.element;
+
+                if (candidate !== null) {
+
+                    if (candidate.type === Element.REST) {
+                        rest = candidate;
+                    }
+                }
             }
 
-            rest = cursor.element;
+            if (rest == null) {
+                console.log("CHORD ==> looking backward for a REST");
+                cursor.rewindToTick(cur_time);
+                if (movePrev(cursor)) {
+					console.log("got a backward element");
+                    var candidate = cursor.element;
+
+                    if (candidate !== null) {
+					console.log("which ain't null");
+
+                        if (candidate.type === Element.REST) {
+					console.log("and is a rest ==> ok");
+                            rest = candidate;
+                        } else {
+					console.log("which ain't a rest ("+candidate.userName()+")");
+						}
+                    }
+					else {
+						console.log("which is null");
+					}
+                }
+					else {
+						console.log("no backward element found");
+					}
+            }
 
             if (rest === null) {
-                warningDialog.text = "Failed to tie the note.\nCannot identify a rest to tie to.";
-                warningDialog.open();
-                return;
-            }
-
-            if (rest.type !== Element.REST) {
-                warningDialog.text = "Failed to tie the note.\nThe selected note must to followed by a rest.";
+                warningDialog.text = "Failed to tie the note.\nThe selected note must be preceeded or followed by a rest.";
                 warningDialog.open();
                 return;
             }
@@ -538,7 +563,11 @@ MuseScore {
 
         NoteHelper.restToChord(rest, notes, true); // with keepRestDuration=true
 
-        cursor.rewindToTick(source.parent.tick);
+		if (source.parent.tick < rest.parent.tick) {
+		    cursor.rewindToTick(source.parent.tick);
+		} else {
+		    cursor.rewindToTick(rest.parent.tick);
+		}
         selectCursor(cursor);
         cmd("chord-tie");
 
@@ -982,20 +1011,20 @@ MuseScore {
             } else
                 chords = [];
         }
-		
-		// on trie par tick puis par voie
-		chords=chords.sort(function(a,b) {
-			if (a.parent.tick!==b.parent.tick) {
-				return a.parent.tick-b.parent.tick;
-			} else {
-				return a.track-b.track;
-			};
-		});
-		
-		// for(var i=0;i<chords.length;i++) {
-			// var el=chords[i];
-			// console.log(el.track+": "+el.parent.tick+": "+el.userName());
-		// }
+
+        // on trie par tick puis par voie
+        chords = chords.sort(function (a, b) {
+            if (a.parent.tick !== b.parent.tick) {
+                return a.parent.tick - b.parent.tick;
+            } else {
+                return a.track - b.track;
+            };
+        });
+
+        // for(var i=0;i<chords.length;i++) {
+        // var el=chords[i];
+        // console.log(el.track+": "+el.parent.tick+": "+el.userName());
+        // }
 
         return chords;
     }
@@ -1345,6 +1374,8 @@ MuseScore {
      */
     function moveNext(cursor) {
 
+        debugSegment(cursor.segment, cursor.track);
+
         var first = cursor.segment.next;
         debugSegment(first, cursor.track);
 
@@ -1368,13 +1399,14 @@ MuseScore {
      */
     function movePrev(cursor) {
 
+        debugSegment(cursor.segment, cursor.track);
         var first = cursor.segment.prev;
-        //debugSegment(first, cursor.track);
+        debugSegment(first, cursor.track);
 
         // for the first segment: we go the first previous *existing* element on the same track.
         while (first && ((first.segmentType != 512) || (first.elementAt(cursor.track) === null))) {
             first = first.prev;
-            //debugSegment(first, cursor.track);
+            debugSegment(first, cursor.track);
         }
 
         if (first === null) {
@@ -1436,8 +1468,8 @@ MuseScore {
             tick++; // Bug in MS with the end of score ticks
         startCmd(cursor.score, "select range");
         var res = cursor.score.selection.selectRange(first.tick, tick, cursor.staffIdx, cursor.staffIdx + 1);
-		// 19/3/22 tentative, mais ne fonctionne pas
-		/*
+        // 19/3/22 tentative, mais ne fonctionne pas
+        /*
         cursor.score.selection.clear();
         var curstmp = cursor.score.newCursor();
         var firstTrack = (chkCrossVoice.checked) ? (cursor.staffIdx * 4) : cursor.track;
@@ -1447,22 +1479,22 @@ MuseScore {
         curstmp.rewindToTick(first.tick);
         var seg = curstmp.segment;
         while (seg != null && seg.tick <= tick) {
-            for (var t = firstTrack; t <= lastTrack; t++) {
-                var el = seg.elementAt(t, true);
-                if (el!=null && el.type === Element.CHORD) {
-                    var cnotes = el.notes;
-                    for (var j = 0; j<cnotes.length; j++) {
-                        cursor.score.selection.select(cnotes[j]);
-                        console.log("adding "+cnotes[j].userName()+" ("+el.parent.tick+") to selection");
-                    }
-                } else if (el!=null) {
-                        console.log("adding "+el.userName()+" ("+el.parent.tick+") to selection");
-                    cursor.score.selection.select(el);
-                }
-            }
-            seg = seg.next;
+        for (var t = firstTrack; t <= lastTrack; t++) {
+        var el = seg.elementAt(t, true);
+        if (el!=null && el.type === Element.CHORD) {
+        var cnotes = el.notes;
+        for (var j = 0; j<cnotes.length; j++) {
+        cursor.score.selection.select(cnotes[j]);
+        console.log("adding "+cnotes[j].userName()+" ("+el.parent.tick+") to selection");
         }
-*/
+        } else if (el!=null) {
+        console.log("adding "+el.userName()+" ("+el.parent.tick+") to selection");
+        cursor.score.selection.select(el);
+        }
+        }
+        seg = seg.next;
+        }
+         */
         endCmd(cursor.score, "select range");
 
         return res;
