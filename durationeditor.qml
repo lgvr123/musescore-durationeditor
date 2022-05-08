@@ -22,6 +22,9 @@ import "durationeditor"
 /* 	- 1.3.0.beta2: Paste correct accidentals
 /* 	- 1.3.0.beta2: SetDurationXyz fonctionne correctement en multi-voix: toutes les voix sont mises à jour dans tous les cas
 /* 	- 1.3.0.beta2: Tie on previous rest too
+/* 	- 1.3.0.beta2: Better count available the remaining duration when a tuplet is involved
+/* 	- 1.3.0.beta2: Correction for the 5:4 case
+/* 	- 1.3.0.beta2: Forbid setDuration and setDot within tuplets
 /**********************************************/
 
 MuseScore {
@@ -310,6 +313,13 @@ MuseScore {
     }
 
     function setElementDot(element, dot) {
+
+		if (element.tuplet !== null) {
+			warningDialog.text = "Cannot perform this action for elements within tuplets";
+			warningDialog.open();
+			return;
+		}
+
         var current = durationTo64(element.duration);
         var analyze = analyzeDuration(current);
 
@@ -334,6 +344,12 @@ MuseScore {
      */
     function setElementDuration(element, newDuration) {
 
+		if (element.tuplet !== null) {
+			warningDialog.text = "Cannot perform this action for elements within tuplets";
+			warningDialog.open();
+			return;
+		}
+
         var insertmode = (newDuration < 0);
         newDuration = Math.abs(newDuration);
 
@@ -357,7 +373,6 @@ MuseScore {
 
             // 1) on coupe ce qu'on va déplacer
             var doCutPaste = selectRemaingInMeasure(cursor, insertmode);
-
             if (doCutPaste) {
                 console.log("CMD: cmd(\"cut\")");
                 cmd("cut");
@@ -374,7 +389,11 @@ MuseScore {
 
             // 3) on adapte la durée de la note
             cursor.rewindToTick(cur_time);
+			debugCursor(cursor,"before cursorToDuration");
             cursorToDuration(cursor, newDuration);
+			debugCursor(cursor,"after cursorToDuration");
+			
+			var lastRestTick=cursor.tick;
 
             // 4) s'occuper des autres voix (uniquement quand la durée augmente)
             // 1.3.0
@@ -398,8 +417,12 @@ MuseScore {
 
             // 5) On fait le paste
             if (doCutPaste) {
-                cursor.rewindToTick(cur_time);
+                // cursor.rewindToTick(cur_time);
+                cursor.rewindToTick(lastRestTick); //1.3.0
+			debugCursor(cursor,"rewind for paste");
                 cursor.next();
+							debugCursor(cursor,"paste position");
+
                 selectCursor(cursor);
                 console.log("CMD: cmd(\"paste\")");
                 cmd("paste");
@@ -743,6 +766,7 @@ MuseScore {
         var tuplet = tupletChords[0].tuplet;
         var measure = tuplet.parent;
         var _p = tupletChords[0].tuplet.elements;
+		var tuplet_ratio=tupletChords[0].tuplet.actualNotes/tupletChords[0].tuplet.normalNotes;
         var chords = [];
         // Rem: duration is my target duration
         var duration = 0;
@@ -753,6 +777,7 @@ MuseScore {
                 duration += durationTo64(e.duration);
             }
         };
+		var origduration=duration/tuplet_ratio;
 
         // for (var i = 0; i < chords.length; i++) {
         // console.log("Tuplets chords: " + chords[i].userName() + " with duration " + durationTo64(chords[i].duration));
@@ -769,6 +794,10 @@ MuseScore {
 
         startCmd(curScore, "removeTuplet");
         removeElement(tuplet);
+		// 1.3.0 dans certains cas le removeElement ne donne pas lieu à 1 silence masi pls, dont la somme à la bonne durée,
+		// il faut le refusionner ensemble
+        cursor.rewindToTick(cur_time);
+		cursorToDuration(cursor, origduration);
         endCmd(curScore, "removeTuplet");
 
         cursor.rewindToTick(cur_time);
@@ -1161,7 +1190,8 @@ MuseScore {
         console.log(" last : " + ((last !== null) ? last.userName() : " / "));
 
         if (last != null) {
-            var orig = durationTo64(last.duration);
+            // var orig = durationTo64(last.duration); //
+            var orig = elementTo64Effective(last);
             var target = orig + increment;
             var tick = last.parent.tick;
             cursor.rewindToTick(tick);
@@ -1206,7 +1236,7 @@ MuseScore {
             if (orig <= remaining) {
                 cursor.score.selection.select(element);
                 console.log("CMD: cmd(\"time-delete\")");
-                cmd("time-delete");
+				cmd("time-delete");
                 remaining -= orig;
             } else {
                 // The rest is too big. Splitting it in 2.
@@ -1235,6 +1265,18 @@ MuseScore {
 
     }
 
+	/**
+	 * Effective duration of an element (so taking into account the tuplet it belongs to)
+	 */
+	function elementTo64Effective(element) {
+	    // if (!element.duration)
+	        // return 0;
+	    var dur = durationTo64(element.duration);
+	    if (element.tuplet !== null) {
+			dur=dur * element.tuplet.normalNotes / element.tuplet.actualNotes;
+	    }
+	    return dur;
+	}
     function durationTo64(duration) {
         return 64 * duration.numerator / duration.denominator;
     }
@@ -1300,11 +1342,16 @@ MuseScore {
                 }
                 if ((element != null) && ((element.type == Element.REST) || (element.type == Element.CHORD)) && !inTail) {
                     // When not longer in the "rest-tail" we decrease the remaing length by the element duration
-                    duration -= durationTo64(element.duration);
+					// var eldur=durationTo64(element.duration);
+						// 1.3.0 take into account the effective dur of the element when within a tuplet
+					var eldur=elementTo64Effective(element);
+                    duration -= eldur;
                 }
                 last = last.prevInMeasure;
             }
         }
+		
+		duration=Math.round(duration);
         return duration;
     }
 
@@ -1437,7 +1484,7 @@ MuseScore {
         var element;
         var the_real_last = last;
         //while ((last!=null) && (((element = last.elementAt(track)) == null) || (element.type == Element.REST))) {
-        while ((last != null) && (((element = _d(last, cursor.track)) == null) || (element.type != Element.CHORD))) {
+        while ((last != null) && (((element = _d(last, cursor.track)) == null) || ((element.type != Element.CHORD) && (element.tuplet===null)) )) {  // 1.3.0 un élement dans un tuplet, on arrête
             if (element != null)
                 the_real_last = last;
             last = last.prevInMeasure;
@@ -1506,7 +1553,7 @@ MuseScore {
         var the_real_last = segment;
         var element = null;
         //while ((last!=null) && (((element = last.elementAt(track)) == null) || (element.type == Element.REST))) {
-        while ((last != null) && (((element = _d(last, track)) == null) || (element.type != Element.CHORD))) {
+        while ((last != null) && (((element = _d(last, track)) == null) || ((element.type != Element.CHORD) /*&& (element.tuplet===null)*/))) { /* //1.3.0 Rest within tuplets cannot be used */
             if ((element != null) && (element.type == Element.REST)) {
                 the_real_last = last;
                 break;
@@ -1625,6 +1672,11 @@ MuseScore {
         onRejected: manualTupletDefinitionDialog.close();
 
     }
+
+	function debugCursor(cursor, label) {
+		var l=(label!==undefined)?(label+": "):"";
+		console.log(l+"cursor at: "+cursor.tick);
+	}
 
     function debugMeasureLength(measure) {
         console.log(measure.timesigNominal.str + " // " + measure.timesigActual.str);
