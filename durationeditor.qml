@@ -549,12 +549,10 @@ MuseScore {
                         } else {
 					console.log("which ain't a rest ("+candidate.userName()+")");
 						}
-                    }
-					else {
+                    } else {
 						console.log("which is null");
 					}
-                }
-					else {
+                } else {
 						console.log("no backward element found");
 					}
             }
@@ -789,19 +787,29 @@ MuseScore {
         // 1) Remove the tuplet
         var cur_time = chords[0].parent.tick;
         var cursor = curScore.newCursor();
-        cursor.track = chords[0].track;
+		var track= chords[0].track;
         cursor.rewindToTick(cur_time);
+        cursor.track = track;
+		
+		debugCursor(cursor,"removing tuplet");
+
 
         startCmd(curScore, "removeTuplet");
         removeElement(tuplet);
 		// 1.3.0 dans certains cas le removeElement ne donne pas lieu à 1 silence masi pls, dont la somme à la bonne durée,
 		// il faut le refusionner ensemble
         cursor.rewindToTick(cur_time);
+        cursor.track = track;
+		debugCursor(cursor,"merging resulting rests if necessary");
+		console.log("merging to "+origduration);
 		cursorToDuration(cursor, origduration);
         endCmd(curScore, "removeTuplet");
 
         cursor.rewindToTick(cur_time);
+        cursor.track = track;
         var rest = cursor.element;
+		debugCursor(cursor,"setting correct length of first element");
+		console.log("setting to "+duration);
         setElementDuration(rest, duration);
 
         // 2) Re-add the selection
