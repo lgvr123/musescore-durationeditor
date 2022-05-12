@@ -1514,34 +1514,63 @@ MuseScore {
         if (tick == cursor.score.lastSegment.tick)
             tick++; // Bug in MS with the end of score ticks
         startCmd(cursor.score, "select range");
-        var res = cursor.score.selection.selectRange(first.tick, tick, cursor.staffIdx, cursor.staffIdx + 1);
-        // 19/3/22 tentative, mais ne fonctionne pas
-        /*
+
+        var res;
+        // res=cursor.score.selection.selectRange(first.tick, tick, cursor.staffIdx, cursor.staffIdx + 1);
+
+        if (chkCrossVoice.checked) {
+            res = cursor.score.selection.selectRange(first.tick, tick, cursor.staffIdx, cursor.staffIdx + 1);
+
+        } else {
+			// 9/5/22 tentative, mais ne fonctionne pas: la sélection et le cut fonctionnent, mais pas le paste. 
+
         cursor.score.selection.clear();
         var curstmp = cursor.score.newCursor();
-        var firstTrack = (chkCrossVoice.checked) ? (cursor.staffIdx * 4) : cursor.track;
-        var lastTrack = (chkCrossVoice.checked) ? (cursor.staffIdx * 4 + 3) : cursor.track;
-        console.log("--> Yes. Selecting from " + first.tick + "/" + firstTrack + " to " + tick + "/" + lastTrack);
-        console.log("Cross voice edition ? " + chkCrossVoice.checked);
+			
+			res=false;
+
+            console.log("--> Yes. Selecting from " + first.tick + "/" + cursor.track + " to " + tick + "/" + cursor.track);
+
         curstmp.rewindToTick(first.tick);
+            // curstmp.filter = Segment.All;
+            curstmp.filter = Segment.ChordRest ;
         var seg = curstmp.segment;
         while (seg != null && seg.tick <= tick) {
-        for (var t = firstTrack; t <= lastTrack; t++) {
-        var el = seg.elementAt(t, true);
-        if (el!=null && el.type === Element.CHORD) {
+				console.log("---- at tick "+seg.tick);
+                // var el = seg.elementAt(t, true); // ??? "true" ???
+                // var el = findElementAt(seg, cursor.track);
+                var el = seg.elementAt(cursor.track); 
+                if ((el != null) && (el.parent.tick === seg.tick)) {
+                    if (el.type === Element.CHORD) {
         var cnotes = el.notes;
         for (var j = 0; j<cnotes.length; j++) {
-        cursor.score.selection.select(cnotes[j]);
+                            var r=cursor.score.selection.select(cnotes[j],true);
         console.log("adding "+cnotes[j].userName()+" ("+el.parent.tick+") to selection");
+							res=res||r;
         }
-        } else if (el!=null) {
+                    } else {
         console.log("adding "+el.userName()+" ("+el.parent.tick+") to selection");
-        cursor.score.selection.select(el);
+                        var r=cursor.score.selection.select(el,true);
+							res=res||r;
+                    }
+
+                    if ((el.elements) && (el.elements.length > 0)) {
+                        var celements = el.elements;
+                        for (var j = 0; j < celements.length; j++) {
+                            cursor.score.selection.select(celements[j],true);
+                            console.log("adding " + celements[j].userName() + " (" + el.parent.tick + ") to selection");
+                        }
+                    }
+                } else {
+                    console.log("no element found at this tick "+((el!=null)?("("+el.parent.tick+")"):""));
+                }
+
+                // seg = seg.next;
+                // seg = curstmp.next; // (-) déborde de la mesure, (+) ne prend que ce qu'on veut
+                seg = seg.nextInMeasure;
+            }
         }
-        }
-        seg = seg.next;
-        }
-         */
+
         endCmd(cursor.score, "select range");
 
         return res;
@@ -1675,7 +1704,7 @@ MuseScore {
 
 	function debugCursor(cursor, label) {
 		var l=(label!==undefined)?(label+": "):"";
-		console.log(l+"cursor at: "+cursor.tick);
+        console.log(l + "cursor at: " + cursor.tick+"/"+cursor.track);
 	}
 
     function debugMeasureLength(measure) {
