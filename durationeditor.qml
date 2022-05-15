@@ -875,7 +875,7 @@ MuseScore {
         cursor.rewindToTick(cur_time);
         cursor.track = track;
 		debugCursor(cursor,"merging resulting rests if necessary");
-		console.log("merging to "+origduration);
+		logThis("merging to "+origduration);
 		cursorToDuration(cursor, origduration);
         endCmd(curScore, "removeTuplet");
 
@@ -883,7 +883,7 @@ MuseScore {
         cursor.track = track;
         var rest = cursor.element;
 		debugCursor(cursor,"setting correct length of first element");
-		console.log("setting to "+duration);
+		logThis("setting to "+duration);
         setElementDuration(rest, duration);
 
         // 2) Re-add the selection
