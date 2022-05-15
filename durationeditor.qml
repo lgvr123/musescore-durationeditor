@@ -27,6 +27,7 @@ import "durationeditor"
 /* 	- 1.3.0.beta2: Forbid setDuration and setDot within tuplets
 /* 	- 1.3.0.beta2: log to file
 /* 	- 1.3.0.beta2: Single Voice edition (ongoing - paste doesn't work)
+/* 	- 1.3.0.beta2: Tuplet multivoice edition (ongoing)
 /**********************************************/
 
 MuseScore {
@@ -37,7 +38,7 @@ MuseScore {
     readonly property var selHelperVersion: "1.2.2"
     readonly property var noteHelperVersion: "1.0.5"
 
-    readonly property var debug: false
+    readonly property var debug: true
 
     pluginType: "dock"
     dockArea: "left"
@@ -293,7 +294,7 @@ MuseScore {
 
         // auto-run test
         if (debug) {
-            // addRemoveTupplet();
+            addRemoveTupplet();
         }
 
     }
@@ -676,11 +677,14 @@ MuseScore {
         } else if (tupletChords && (tupletChords.length == 0)) {
             logThis("No TUPLETS FOUND FROM SELECTION");
             tupletChords = getTupletsCandidates();
+			
+			console.log(tupletChords);
 
             if (tupletChords && (tupletChords.length > 0)) {
                 // Regular chords selected - Converting to tuplets chords
                 logThis("THE SELECTION CAN BE CONVERTED to TUPLETS");
-                convertChordsToTuplets(tupletChords, ask);
+
+				convertChordsToTuplets(tupletChords, ask);
 
             } else {
                 warningDialog.subtitle = "Tuplet conversion";
@@ -701,35 +705,36 @@ MuseScore {
         }
 
     }
-    function convertChordsToTuplets(chords, ask) {
+    function convertChordsToTuplets(tracksdata, ask) {
         // Transforming regular notes into tuplets
-        var measure = chords[0].parent.parent;
-
-        var duration = 0;
-        var samedur = 0;
-        for (var i = 0; i < chords.length; i++) {
-            var dur = durationTo64(chords[i].duration);
-            duration += dur;
-            logThis("To tuplets elements: " + chords[i].userName() + " with duration " + dur);
-            if (samedur == 0)
-                samedur = dur;
-            else if ((samedur > 0) && (samedur !== dur))
-                samedur = -1;
-        }
+		var track1=tracksdata[0];
+        var measure = track1.chords[0].parent.parent;
+		var duration=track1.duration;
 
         // var measureType = measure.timesigActual.denominator;
         var measureType = measure.timesigNominal.denominator;
 
-        logThis("Selection: " + chords.length + "element, total duration: " + duration);
+        logThis("Selection: " + track1.chords.length + "element, total duration: " + track1.duration);
         logThis("Measure: x/" + measureType + ", total duration: " + sigTo64(measure.timesigActual));
 
         var tupletN = null;
         var tupletD = null;
 
         var nums = [3, 5, 7, 9, 4, 6, 8];
+		
+		
         // En x/8 si j'ai 2 notes sélectionnées, de même durée, j'autorise aussi à faire des 2:3
-        if ((chords.length == 2) && (measureType == 8) && (samedur > 0))
-            nums.unshift(2);
+		if (measureType === 8) { 
+			// on garde les tracks qui ont 2 accords et de même durée
+			var tsamdur=tracksdata.filter(function(e) { 
+				return e.samedur && e.chords.length==2;
+			});
+
+			// si au 1 
+			if (tsamedur.length>0) 
+			// if ((chords.length == 2) && (measureType == 8) && (samedur > 0))
+				nums.unshift(2);
+		}
 
         for (var i = 0; i < nums.length; i++) {
             var n = nums[i];
@@ -751,7 +756,7 @@ MuseScore {
         logThis("Heading to " + ((tupletN != null) ? (tupletN + ":" + tupletD + " of " + (duration / tupletN)) : "???"));
 
         if (ask || (tupletN == null) || (tupletD == null) || (tupletN == tupletD)) {
-            manualTupletDefinitionDialog.chords = chords;
+            manualTupletDefinitionDialog.tracksdata = tracksdata;
             manualTupletDefinitionDialog.duration = duration;
             manualTupletDefinitionDialog.measureType = measureType;
             manualTupletDefinitionDialog.tupletN = (tupletN != null) ? tupletN : "";
@@ -759,29 +764,34 @@ MuseScore {
             manualTupletDefinitionDialog.open();
             return;
         } else {
-            convertChordsToTuplets_Exectute(chords, duration, measureType, tupletN, tupletD);
+            convertChordsToTuplets_Exectute(tracksdata, duration, measureType, tupletN, tupletD);
         }
     }
 
-    function convertChordsToTuplets_Exectute(chords, duration, measureType, tupletN, tupletD) {
+    function convertChordsToTuplets_Exectute(tracksdata, duration, measureType, tupletN, tupletD) {
         if (tupletN == null || tupletD == null) {
             warningDialog.subtitle = "Tuplet conversion";
             warningDialog.text = "Wrong tuplet definition: --" + ((tupletN) ? tupletN : "/") + ":" + ((tupletD) ? tupletD : "/") + "--";
             warningDialog.open();
             return;
         }
+		
+		// Working track by track
+		for(var t=0; t<tracksdata.length;t++) {
+			var track=tracksdata[t];
+			
 
         // Inserting the triplet
         // 0) collecting what to be re-added
-        var targets = copySelection(chords);
+        var targets = copySelection(track.chords);
 
         // 1) deleting/reducing the last element duration
         var targetdur = duration * tupletD / tupletN;
         logThis("duration modification : " + duration + " --> " + targetdur);
         var delta = duration - targetdur;
         startCmd(curScore, "adapt last note duration");
-        for (var i = chords.length - 1; i >= 0; i--) {
-            var last = chords[i];
+        for (var i = track.chords.length - 1; i >= 0; i--) {
+            var last = track.chords[i];
             var newDuration = durationTo64(last.duration) - delta;
             if (newDuration >= 0) {
                 setElementDuration(last, newDuration);
@@ -795,9 +805,9 @@ MuseScore {
         endCmd(curScore, "adapt last note duration"); // DEBUG
 
         // 2) adding a tuplet
-        var cur_time = chords[0].parent.tick;
+        var cur_time = track.first_tick;
         var cursor = curScore.newCursor();
-        cursor.track = chords[0].track;
+        cursor.track = track.track;
         cursor.rewindToTick(cur_time);
 
         startCmd(curScore, "addTuplet");
@@ -811,6 +821,7 @@ MuseScore {
 
         // 3) re-adding the notes
         pasteSelection(cursor, targets);
+		}
 
         // if (!debug)endCmd(curScore);
 
@@ -1058,34 +1069,99 @@ MuseScore {
         if (selection.length == 0)
             return false;
 
-        var cur_time = selection[0].parent.tick;
-        var cursor = curScore.newCursor();
-        cursor.track = selection[0].track;
-        cursor.rewindToTick(cur_time);
+        selection.sort(function (a, b) {
+            if (a.parent.tick === b.parent.tick)
+                return a.track - b.track;
+            return a.parent.tick - b.parent.tick;
+        });
 
-        //debug
-        logThis("ticks: " + selection.map(function (e) {
-                return e.parent.tick;
-            }).join(" - "));
+        // grouping stuff by tracks
+        var tracks = {};
+        for (var i = 0; i < selection.length; i++) {
+            var e = selection[i];
+            var t = e.track;
+            if (tracks[t] === undefined)
+                tracks[t] = {
+                    track: t,
+                    chords: [],
+                    duration: null
+                }
+            tracks[t].chords.push(e);
+        }
+		
+		// .. flatten this into an array
+		tracks = Object.keys(tracks).map(function (e) {
+		    return tracks[e];
+		});
 
-        logThis("0) " + selection[0].parent.tick);
+        // verifying the coherence of all the tracks
+        logThis("Candidate tuplet selection on tracks: " + Object.keys(tracks));
 
-        for (var i = 1; i < selection.length; i++) {
-            var sel = selection[i];
-            logThis(i + ") " + sel.parent.tick);
-            var next = moveNextInMeasure(cursor) ? cursor.element : null;
+        for (var it = 0; it < tracks.length; it++) {
+            var track = tracks[it];
+            // sorting by ascending tick
+            track.chords = track.chords.sort(function (a, b) {
+                return a.parent.tick - b.parent.tick;
+            });
 
-            if ((next == null) || (sel.parent.tick != next.parent.tick)) {
-                logThis("Selection mistmatch: expecting " + sel.parent.tick + ", found: " + ((next != null) ? next.parent.tick : "null"));
+            var selt = track.chords;
+
+            // ensuring all tuplets candidates are starting at the same tick
+            track.first_tick = selt[0].parent.tick;
+
+            if (it > 0 && tracks[it - 1].first_tick !== track.first_tick) {
+                logThis("Multi track selection does not start at the same tick");
                 return false;
-            } else {
-                logThis("Selection match: expecting " + sel.parent.tick + ", found: " + next.parent.tick + " (" + next.userName() + ")");
-
             }
+
+            // computing duration and ensuring an equal duration
+            track.duration = 0;
+            track.samedur = 0;
+            for (var i = 0; i < track.chords.length; i++) {
+                var dur = durationTo64(track.chords[i].duration);
+                track.duration += dur;
+                logThis("To tuplets elements: " + track.chords[i].userName() + " with duration " + dur);
+                if (track.samedur == 0)
+                    track.samedur = dur;
+                else if ((track.samedur > 0) && (track.samedur !== dur))
+                    track.samedur = -1;
+            }
+
+            if (it > 0 && tracks[it - 1].duration !== track.duration) {
+                logThis("Multi track selection does not have the same duration");
+                return false;
+            }
+
+            //debug
+            logThis("ticks: " + selection.map(function (e) {
+                    return e.parent.tick + "/" + e.track;
+                }).join(" - "));
+
+            // looking for consecutiveness of notes
+            var cursor = curScore.newCursor();
+            cursor.track = track.track;
+            cursor.rewindToTick(track.first_tick);
+
+            logThis("0) " + selt[0].parent.tick + "/" + selt[0].track);
+
+            for (var i = 1; i < selt.length; i++) {
+                var sel = selt[i];
+                logThis(i + ") " + sel.parent.tick);
+                var next = moveNextInMeasure(cursor) ? cursor.element : null;
+
+                if ((next == null) || (sel.parent.tick != next.parent.tick)) {
+                    logThis("Selection mistmatch: expecting " + sel.parent.tick + ", found: " + ((next != null) ? next.parent.tick : "null"));
+                    return false;
+                } else {
+                    logThis("Selection match: expecting " + sel.parent.tick + ", found: " + next.parent.tick + " (" + next.userName() + ")");
+
+                }
+            }
+
         }
 
         logThis("The selection is valid");
-        return selection;
+        return tracks;
 
     } // getTupletsCandidates
 
@@ -1418,7 +1494,7 @@ MuseScore {
 
     function _d(last, track) {
         var el = last.elementAt(track);
-        logThis(" At " + last.tick +"/"+track+ ": " + ((el !== null) ? el.userName() : " / "));
+        logThis(" At " + last.tick + "/" + track + ": " + ((el !== null) ? el.userName() : " / "));
         return el;
     }
 
@@ -1532,7 +1608,7 @@ MuseScore {
      *
      */
     function selectRemaingInMeasure(cursor, include) {
-		logThis("selectRemaingInMeasure: ");
+        logThis("selectRemaingInMeasure: ");
         var measure = cursor.measure;
         //var first = cursor.segment.nextInMeasure;
         var first = (include === undefined || !include) ? cursor.segment.nextInMeasure : cursor.segment;
@@ -1690,7 +1766,7 @@ MuseScore {
         //modal: true
         standardButtons: Dialog.Save | Dialog.Cancel
 
-        property var chords
+        property var tracksdata
         property var duration
         property var measureType
         property alias tupletN: txtTupletN.text
@@ -1758,7 +1834,7 @@ MuseScore {
             }
             manualTupletDefinitionDialog.close();
 
-            convertChordsToTuplets_Exectute(chords, duration, measureType, tN, tD);
+            convertChordsToTuplets_Exectute(tracksdata, duration, measureType, tN, tD);
         }
         onRejected: manualTupletDefinitionDialog.close();
 
