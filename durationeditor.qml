@@ -3,8 +3,8 @@ import QtQuick.Controls 2.2
 import MuseScore 3.0
 import QtQuick.Window 2.2
 import QtQuick.Dialogs 1.2
-import QtQuick.Controls.Styles 1.4
 import QtQuick.Layouts 1.1
+import FileIO 3.0
 import "zparkingb/selectionhelper.js" as SelHelper
 import "zparkingb/notehelper.js" as NoteHelper
 import "durationeditor"
@@ -25,23 +25,26 @@ import "durationeditor"
 /* 	- 1.3.0.beta2: Better count available the remaining duration when a tuplet is involved
 /* 	- 1.3.0.beta2: Correction for the 5:4 case
 /* 	- 1.3.0.beta2: Forbid setDuration and setDot within tuplets
+/* 	- 1.3.0.beta2: log to file
+/* 	- 1.3.0.beta2: Single Voice edition (ongoing - paste doesn't work)
+/* 	- 1.3.0.beta2: Tuplet multivoice edition (ongoing)
 /**********************************************/
 
 MuseScore {
     menuPath: "Plugins." + pluginName
     description: "Edit the notes and rests length by moving the next notes in the measure, instead of eating them."
-    version: "1.3.0"
+    version: "1.3.0.beta2"
     readonly property var pluginName: "Duration Editor"
     readonly property var selHelperVersion: "1.2.2"
     readonly property var noteHelperVersion: "1.0.5"
 
-    readonly property var debug: false
+    readonly property var debug: true
 
-    pluginType: debug ? undefined : "dock"
-    dockArea: "right"
+    pluginType: "dock"
+    dockArea: "left"
     requiresScore: false
-    width: 600
-    height: 100
+    width: 450
+    height: 200
 
     readonly property var imgHeight: 32
     readonly property var imgPadding: 8
@@ -259,8 +262,21 @@ MuseScore {
             id: chkCrossVoice
             boxWidth: 20
             text: "Cross voices edition"
-            ToolTip.text: "Treat all the voices has one"
-            checked: false
+            ToolTip.text: "Treat all the voices at oncee."
+            checked: true
+            enabled: false;
+        }
+
+        RowLayout {
+            Item {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 1
+            }
+            Label {
+                text: "v: " + version
+                font.italic: true
+                font.pointSize: 8
+            }
         }
 
     } // ColumnLayout
@@ -277,12 +293,19 @@ MuseScore {
         }
 
         // auto-run test
-        if (debug)
+        if (debug) {
             addRemoveTupplet();
+        }
 
     }
 
     function setDuration(newDuration) {
+        // log to file
+        if (debug) {
+            console.log("Logfile: " + logfile.source);
+            openLog(logfile.source);
+        }
+
         var chords = getSelection();
 
         if (!chords || (chords.length == 0))
@@ -290,9 +313,18 @@ MuseScore {
 
         setElementDuration(chords[0], newDuration);
 
+        if (debug) {
+            closeLog();
+        }
     }
 
     function insertRest(newDuration) {
+        // log to file
+        if (debug) {
+            console.log("Logfile: " + logfile.source);
+            openLog(logfile.source);
+        }
+
         var chords = getSelection();
 
         if (!chords || (chords.length == 0))
@@ -300,9 +332,18 @@ MuseScore {
 
         setElementDuration(chords[0], newDuration * (-1));
 
+        if (debug) {
+            closeLog();
+        }
     }
 
     function setDot(newDuration) {
+        // log to file
+        if (debug) {
+            console.log("Logfile: " + logfile.source);
+            openLog(logfile.source);
+        }
+
         var chords = getSelection();
 
         if (!chords || (chords.length == 0))
@@ -310,20 +351,23 @@ MuseScore {
 
         setElementDot(chords[0], newDuration);
 
+        if (debug) {
+            closeLog();
+        }
     }
 
     function setElementDot(element, dot) {
 
-		if (element.tuplet !== null) {
-			warningDialog.text = "Cannot perform this action for elements within tuplets";
-			warningDialog.open();
-			return;
-		}
+        if (element.tuplet !== null) {
+            warningDialog.text = "Cannot perform this action for elements within tuplets";
+            warningDialog.open();
+            return;
+        }
 
         var current = durationTo64(element.duration);
         var analyze = analyzeDuration(current);
 
-        console.log(current + " => " + analyze.base + "/" + analyze.ratio);
+        logThis(current + " => " + analyze.base + "/" + analyze.ratio);
 
         var newDuration;
 
@@ -344,11 +388,11 @@ MuseScore {
      */
     function setElementDuration(element, newDuration) {
 
-		if (element.tuplet !== null) {
-			warningDialog.text = "Cannot perform this action for elements within tuplets";
-			warningDialog.open();
-			return;
-		}
+        if (element.tuplet !== null) {
+            warningDialog.text = "Cannot perform this action for elements within tuplets";
+            warningDialog.open();
+            return;
+        }
 
         var insertmode = (newDuration < 0);
         newDuration = Math.abs(newDuration);
@@ -363,46 +407,46 @@ MuseScore {
 
         var current = durationTo64(element.duration);
         var increment = (insertmode) ? newDuration : newDuration - current;
-        console.log("from " + current + " to " + newDuration);
+        logThis("from " + current + " to " + newDuration);
 
         if (increment > 0) {
 
             // 0) On compte ce qu'on a comme buffer en fin de mesure
             var buffer = computeRemainingRest(cursor.measure, cursor.track, cur_time);
-            console.log("Required increment is : " + increment + ", current buffer is : " + buffer);
+            logThis("Required increment is : " + increment + ", current buffer is : " + buffer);
 
             // 1) on coupe ce qu'on va déplacer
             var doCutPaste = selectRemaingInMeasure(cursor, insertmode);
             if (doCutPaste) {
-                console.log("CMD: cmd(\"cut\")");
+                logThis("CMD: cmd(\"cut\")");
                 cmd("cut");
             }
 
             // 2) on adapte la longueur de la mesure (si on n'a pas assez de buffer)
             if (buffer < increment) {
                 var delta = increment - buffer;
-                console.log("buffer is < increment => adding a rest of " + delta);
+                logThis("buffer is < increment => adding a rest of " + delta);
                 appendRest(cursor, delta);
             } else {
-                console.log("buffer is >= increment => no need to add a rest");
+                logThis("buffer is >= increment => no need to add a rest");
             }
 
             // 3) on adapte la durée de la note
             cursor.rewindToTick(cur_time);
-			debugCursor(cursor,"before cursorToDuration");
+            debugCursor(cursor, "before cursorToDuration");
             cursorToDuration(cursor, newDuration);
-			debugCursor(cursor,"after cursorToDuration");
-			
-			var lastRestTick=cursor.tick;
+            debugCursor(cursor, "after cursorToDuration");
+
+            var lastRestTick = cursor.tick;
 
             // 4) s'occuper des autres voix (uniquement quand la durée augmente)
             // 1.3.0
             var t_cursor = cursor.score.newCursor();
             t_cursor.rewindToTick(cur_time);
             var seg = t_cursor.segment;
-            console.log("About to adapt others for tracks " + (cursor.staffIdx * 4) + " to " + ((cursor.staffIdx + 1) * 4));
+            logThis("About to adapt others for tracks " + (cursor.staffIdx * 4) + " to " + ((cursor.staffIdx + 1) * 4));
             for (var t = cursor.staffIdx * 4; t < (cursor.staffIdx + 1) * 4; t++) {
-                console.log("adapting others at track " + t);
+                logThis("adapting others at track " + t);
                 if (t === element.track)
                     continue; // on a déjà traité celui-là
                 var t_el = seg.elementAt(t);
@@ -410,7 +454,7 @@ MuseScore {
                     continue; // rien sur la voie t à ce tick
                 var t_dur = durationTo64(t_el.duration);
                 var t_newdur = t_dur + increment;
-                console.log("adapting others from " + t_dur + " to " + t_newdur);
+                logThis("adapting others from " + t_dur + " to " + t_newdur);
                 t_cursor.track = t;
                 cursorToDuration(t_cursor, t_newdur);
             }
@@ -419,12 +463,12 @@ MuseScore {
             if (doCutPaste) {
                 // cursor.rewindToTick(cur_time);
                 cursor.rewindToTick(lastRestTick); //1.3.0
-			debugCursor(cursor,"rewind for paste");
+                debugCursor(cursor, "rewind for paste");
                 cursor.next();
-							debugCursor(cursor,"paste position");
+                debugCursor(cursor, "paste position");
 
                 selectCursor(cursor);
-                console.log("CMD: cmd(\"paste\")");
+                logThis("CMD: cmd(\"paste\")");
                 cmd("paste");
             }
             //endCmd(score);
@@ -436,7 +480,7 @@ MuseScore {
             var doCutPaste = selectRemaingInMeasure(cursor);
 
             if (doCutPaste) {
-                console.log("CMD: cmd(\"cut\")");
+                logThis("CMD: cmd(\"cut\")");
                 cmd("cut");
             }
 
@@ -447,7 +491,7 @@ MuseScore {
             else {
                 // duration 0, so replace the element by a rest
                 startCmd(score);
-                console.log("CMD: replace element by rest (removeElement)");
+                logThis("CMD: replace element by rest (removeElement)");
                 removeElement(element);
                 endCmd(score);
             }
@@ -460,7 +504,7 @@ MuseScore {
                 if (newDuration != 0)
                     cursor.next();
                 selectCursor(cursor);
-                console.log("CMD: cmd(\"paste\")");
+                logThis("CMD: cmd(\"paste\")");
                 cmd("paste");
             }
 
@@ -479,9 +523,15 @@ MuseScore {
     }
 
     function addTie() {
+        // log to file
+        if (debug) {
+            logThis("Logfile: " + logfile.source);
+            openLog(logfile.source);
+        }
+
         var rests = getSelection();
         if (rests.length == 0) {
-            console.log("NO SELECTION. QUIT HERE.");
+            logThis("NO SELECTION. QUIT HERE.");
             return;
         }
 
@@ -496,7 +546,7 @@ MuseScore {
 
         if (rest.type === Element.REST) {
 
-            console.log("REST ==> looking behind for a CHORD");
+            logThis("REST ==> looking behind for a CHORD");
 
             if (!movePrev(cursor)) {
                 warningDialog.text = "Failed to tie the rest.\nCannot identify a note to tie from.";
@@ -519,7 +569,7 @@ MuseScore {
             }
         } // current is rest
         else {
-            console.log("CHORD ==> looking forward for a REST");
+            logThis("CHORD ==> looking forward for a REST");
             source = rest;
             rest = null;
             if (moveNext(cursor)) {
@@ -534,27 +584,27 @@ MuseScore {
             }
 
             if (rest == null) {
-                console.log("CHORD ==> looking backward for a REST");
+                logThis("CHORD ==> looking backward for a REST");
                 cursor.rewindToTick(cur_time);
                 if (movePrev(cursor)) {
-					console.log("got a backward element");
+                    logThis("got a backward element");
                     var candidate = cursor.element;
 
                     if (candidate !== null) {
-					console.log("which ain't null");
+                        logThis("which ain't null");
 
                         if (candidate.type === Element.REST) {
-					console.log("and is a rest ==> ok");
+                            logThis("and is a rest ==> ok");
                             rest = candidate;
                         } else {
-					console.log("which ain't a rest ("+candidate.userName()+")");
-						}
+                            logThis("which ain't a rest (" + candidate.userName() + ")");
+                        }
                     } else {
-						console.log("which is null");
-					}
+                        logThis("which is null");
+                    }
                 } else {
-						console.log("no backward element found");
-					}
+                    logThis("no backward element found");
+                }
             }
 
             if (rest === null) {
@@ -567,7 +617,7 @@ MuseScore {
 
         // A source is found.
         // var note = source.notes[0];
-        console.log("Got a source at " + source.parent.tick + " and a dest at " + rest.parent.tick);
+        logThis("Got a source at " + source.parent.tick + " and a dest at " + rest.parent.tick);
         var notes = [];
         for (var i = 0; i < source.notes.length; i++) {
             // notes.push(source.notes[i].pitch);
@@ -584,11 +634,11 @@ MuseScore {
 
         NoteHelper.restToChord(rest, notes, true); // with keepRestDuration=true
 
-		if (source.parent.tick < rest.parent.tick) {
-		    cursor.rewindToTick(source.parent.tick);
-		} else {
-		    cursor.rewindToTick(rest.parent.tick);
-		}
+        if (source.parent.tick < rest.parent.tick) {
+            cursor.rewindToTick(source.parent.tick);
+        } else {
+            cursor.rewindToTick(rest.parent.tick);
+        }
         selectCursor(cursor);
         cmd("chord-tie");
 
@@ -597,14 +647,24 @@ MuseScore {
         selectCursor(cursor);
 
         endCmd(curScore);
+
+        if (debug) {
+            closeLog();
+        }
     }
 
     function addRemoveTupplet(ask) {
+        // log to file
+        if (debug) {
+            logThis("Logfile: " + logfile.source);
+            openLog(logfile.source);
+        }
+
         var tupletChords = getTupletsFromSelection();
 
         if (tupletChords && (tupletChords.length > 0)) {
             // Tuplets selected - Converting to regular chords
-            console.log("TUPLETS FOUND FROM SELECTION");
+            logThis("TUPLETS FOUND FROM SELECTION");
             if (ask) {
                 warningDialog.subtitle = "Tuplet conversion";
                 warningDialog.text = "Cannot perform a manual tuplet conversion for this selection.\nThe manual conversion only applies to non-tuplet consecutive notes/rests.";
@@ -615,58 +675,66 @@ MuseScore {
             convertChordsFromTuplets(tupletChords);
 
         } else if (tupletChords && (tupletChords.length == 0)) {
-            console.log("No TUPLETS FOUND FROM SELECTION");
+            logThis("No TUPLETS FOUND FROM SELECTION");
             tupletChords = getTupletsCandidates();
+			
+			console.log(tupletChords);
 
             if (tupletChords && (tupletChords.length > 0)) {
                 // Regular chords selected - Converting to tuplets chords
-                console.log("THE SELECTION CAN BE CONVERTED to TUPLETS");
-                convertChordsToTuplets(tupletChords, ask);
+                logThis("THE SELECTION CAN BE CONVERTED to TUPLETS");
+
+				convertChordsToTuplets(tupletChords, ask);
 
             } else {
                 warningDialog.subtitle = "Tuplet conversion";
                 warningDialog.text = "Invalid selection.\nExpecting a selection of consecutive notes/rests.";
                 warningDialog.open();
-                return;
+                // return;
             }
 
         } else {
             warningDialog.subtitle = "Tuplet conversion";
             warningDialog.text = "Invalid selection.\nExpecting a selection of consecutive notes/rests or of a tuplet.";
             warningDialog.open();
-            return;
+            // return;
+        }
+
+        if (debug) {
+            closeLog();
         }
 
     }
-    function convertChordsToTuplets(chords, ask) {
+    function convertChordsToTuplets(tracksdata, ask) {
         // Transforming regular notes into tuplets
-        var measure = chords[0].parent.parent;
-
-        var duration = 0;
-        var samedur = 0;
-        for (var i = 0; i < chords.length; i++) {
-            var dur = durationTo64(chords[i].duration);
-            duration += dur;
-            console.log("To tuplets elements: " + chords[i].userName() + " with duration " + dur);
-            if (samedur == 0)
-                samedur = dur;
-            else if ((samedur > 0) && (samedur !== dur))
-                samedur = -1;
-        }
+		var track1=tracksdata[0];
+        var measure = track1.chords[0].parent.parent;
+		var duration=track1.duration;
 
         // var measureType = measure.timesigActual.denominator;
         var measureType = measure.timesigNominal.denominator;
 
-        console.log("Selection: " + chords.length + "element, total duration: " + duration);
-        console.log("Measure: x/" + measureType + ", total duration: " + sigTo64(measure.timesigActual));
+        logThis("Selection: " + track1.chords.length + "element, total duration: " + track1.duration);
+        logThis("Measure: x/" + measureType + ", total duration: " + sigTo64(measure.timesigActual));
 
         var tupletN = null;
         var tupletD = null;
 
         var nums = [3, 5, 7, 9, 4, 6, 8];
+		
+		
         // En x/8 si j'ai 2 notes sélectionnées, de même durée, j'autorise aussi à faire des 2:3
-        if ((chords.length == 2) && (measureType == 8) && (samedur > 0))
-            nums.unshift(2);
+		if (measureType === 8) { 
+			// on garde les tracks qui ont 2 accords et de même durée
+			var tsamdur=tracksdata.filter(function(e) { 
+				return e.samedur && e.chords.length==2;
+			});
+
+			// si au 1 
+			if (tsamedur.length>0) 
+			// if ((chords.length == 2) && (measureType == 8) && (samedur > 0))
+				nums.unshift(2);
+		}
 
         for (var i = 0; i < nums.length; i++) {
             var n = nums[i];
@@ -685,10 +753,10 @@ MuseScore {
                 tupletD = 3 * (Math.max((tupletN / 3) | 0, 1));
             }
         }
-        console.log("Heading to " + ((tupletN != null) ? (tupletN + ":" + tupletD + " of " + (duration / tupletN)) : "???"));
+        logThis("Heading to " + ((tupletN != null) ? (tupletN + ":" + tupletD + " of " + (duration / tupletN)) : "???"));
 
         if (ask || (tupletN == null) || (tupletD == null) || (tupletN == tupletD)) {
-            manualTupletDefinitionDialog.chords = chords;
+            manualTupletDefinitionDialog.tracksdata = tracksdata;
             manualTupletDefinitionDialog.duration = duration;
             manualTupletDefinitionDialog.measureType = measureType;
             manualTupletDefinitionDialog.tupletN = (tupletN != null) ? tupletN : "";
@@ -696,29 +764,34 @@ MuseScore {
             manualTupletDefinitionDialog.open();
             return;
         } else {
-            convertChordsToTuplets_Exectute(chords, duration, measureType, tupletN, tupletD);
+            convertChordsToTuplets_Exectute(tracksdata, duration, measureType, tupletN, tupletD);
         }
     }
 
-    function convertChordsToTuplets_Exectute(chords, duration, measureType, tupletN, tupletD) {
+    function convertChordsToTuplets_Exectute(tracksdata, duration, measureType, tupletN, tupletD) {
         if (tupletN == null || tupletD == null) {
             warningDialog.subtitle = "Tuplet conversion";
             warningDialog.text = "Wrong tuplet definition: --" + ((tupletN) ? tupletN : "/") + ":" + ((tupletD) ? tupletD : "/") + "--";
             warningDialog.open();
             return;
         }
+		
+		// Working track by track
+		for(var t=0; t<tracksdata.length;t++) {
+			var track=tracksdata[t];
+			
 
         // Inserting the triplet
         // 0) collecting what to be re-added
-        var targets = copySelection(chords);
+        var targets = copySelection(track.chords);
 
         // 1) deleting/reducing the last element duration
         var targetdur = duration * tupletD / tupletN;
-        console.log("duration modification : " + duration + " --> " + targetdur);
+        logThis("duration modification : " + duration + " --> " + targetdur);
         var delta = duration - targetdur;
         startCmd(curScore, "adapt last note duration");
-        for (var i = chords.length - 1; i >= 0; i--) {
-            var last = chords[i];
+        for (var i = track.chords.length - 1; i >= 0; i--) {
+            var last = track.chords[i];
             var newDuration = durationTo64(last.duration) - delta;
             if (newDuration >= 0) {
                 setElementDuration(last, newDuration);
@@ -732,9 +805,9 @@ MuseScore {
         endCmd(curScore, "adapt last note duration"); // DEBUG
 
         // 2) adding a tuplet
-        var cur_time = chords[0].parent.tick;
+        var cur_time = track.first_tick;
         var cursor = curScore.newCursor();
-        cursor.track = chords[0].track;
+        cursor.track = track.track;
         cursor.rewindToTick(cur_time);
 
         startCmd(curScore, "addTuplet");
@@ -748,6 +821,7 @@ MuseScore {
 
         // 3) re-adding the notes
         pasteSelection(cursor, targets);
+		}
 
         // if (!debug)endCmd(curScore);
 
@@ -764,7 +838,7 @@ MuseScore {
         var tuplet = tupletChords[0].tuplet;
         var measure = tuplet.parent;
         var _p = tupletChords[0].tuplet.elements;
-		var tuplet_ratio=tupletChords[0].tuplet.actualNotes/tupletChords[0].tuplet.normalNotes;
+        var tuplet_ratio = tupletChords[0].tuplet.actualNotes / tupletChords[0].tuplet.normalNotes;
         var chords = [];
         // Rem: duration is my target duration
         var duration = 0;
@@ -775,10 +849,10 @@ MuseScore {
                 duration += durationTo64(e.duration);
             }
         };
-		var origduration=duration/tuplet_ratio;
+        var origduration = duration / tuplet_ratio;
 
         // for (var i = 0; i < chords.length; i++) {
-        // console.log("Tuplets chords: " + chords[i].userName() + " with duration " + durationTo64(chords[i].duration));
+        // logThis("Tuplets chords: " + chords[i].userName() + " with duration " + durationTo64(chords[i].duration));
         // }
 
         // 0) Memorizing what to re-add
@@ -796,8 +870,8 @@ MuseScore {
 
         startCmd(curScore, "removeTuplet");
         removeElement(tuplet);
-		// 1.3.0 dans certains cas le removeElement ne donne pas lieu à 1 silence masi pls, dont la somme à la bonne durée,
-		// il faut le refusionner ensemble
+        // 1.3.0 dans certains cas le removeElement ne donne pas lieu à 1 silence masi pls, dont la somme à la bonne durée,
+        // il faut le refusionner ensemble
         cursor.rewindToTick(cur_time);
         cursor.track = track;
 		debugCursor(cursor,"merging resulting rests if necessary");
@@ -834,7 +908,7 @@ MuseScore {
                 target.notes = chord.notes;
             };
             targets.push(target);
-            console.log("--Lyrics: " + target.lyrics.length + ((target.lyrics.length > 0) ? (" (\"" + target.lyrics[0].text + "\")") : ""));
+            logThis("--Lyrics: " + target.lyrics.length + ((target.lyrics.length > 0) ? (" (\"" + target.lyrics[0].text + "\")") : ""));
         }
 
         return targets;
@@ -846,7 +920,7 @@ MuseScore {
             var target = targets[i];
             //var target = chords[i]; // TEST - DIRECTEMENT UTILISER LES NOTES MEMEORISEES --> KO (du moins sur les durées)
             var tick = cursor.tick;
-            //console.log("Target " + i + ": " + target.duration.numerator + "/" + target.duration.denominator + ", notes: " + (target.notes ? target.notes.length : 0));
+            //logThis("Target " + i + ": " + target.duration.numerator + "/" + target.duration.denominator + ", notes: " + (target.notes ? target.notes.length : 0));
 
             if (target.notes && target.notes.length > 0) {
                 var pitches = [];
@@ -864,17 +938,17 @@ MuseScore {
                 endCmd(curScore, "restToChord"); // DEBUG
             }
 
-            //console.log("note duration modification: "+durationTo64(cursor.element.duration)+" --> "+durationTo64(target.duration));
+            //logThis("note duration modification: "+durationTo64(cursor.element.duration)+" --> "+durationTo64(target.duration));
             startCmd(curScore, "adapt duration"); //DEBUG
             cursor.rewindToTick(tick);
             cursorToDuration(cursor, durationTo64(target.duration));
             var current = cursor.element;
             // debugO("Target", target,["lyrics","notes"],true);
-            console.log("####Lyrics: " + target.lyrics.length + ((target.lyrics.length > 0) ? (" (\"" + target.lyrics[0].text + "\")") : "") + " on " + current.userName());
+            logThis("####Lyrics: " + target.lyrics.length + ((target.lyrics.length > 0) ? (" (\"" + target.lyrics[0].text + "\")") : "") + " on " + current.userName());
             if (typeof(target.lyrics) !== "undefined") {
                 for (var j = 0; j < target.lyrics.length; j++) {
                     var lorig = target.lyrics[j];
-                    console.log("adding a lyric: \"" + lorig.text + "\"");
+                    logThis("adding a lyric: \"" + lorig.text + "\"");
                     // current.add(lorig); // no error but the lyric is not to be seen
                     var lnew = newElement(Element.LYRICS);
                     lnew.text = lorig.text;
@@ -899,17 +973,17 @@ MuseScore {
         var selection = curScore.selection;
         var el = selection.elements;
         var tuplets = [];
-        console.log("Analyzing " + el.length + " elements in search of tuplets");
+        logThis("Analyzing " + el.length + " elements in search of tuplets");
         for (var i = 0; i < el.length; i++) {
             var element = el[i];
-            console.log("\t" + i + ") " + element.type + " (" + element.userName() + ")");
+            logThis("\t" + i + ") " + element.type + " (" + element.userName() + ")");
             if (element.type == Element.TUPLET) {
                 tuplets.push(element);
             }
         }
 
         if (tuplets.length != 0) {
-            console.log("A tuplet bar is selected. Returning its elements");
+            logThis("A tuplet bar is selected. Returning its elements");
             var parts = [];
             var tuplet = tuplets[0];
             for (var i = 0; i < tuplet.length; i++) {
@@ -925,7 +999,7 @@ MuseScore {
         if (selection.length == 0) {
             // empty selection
             // should return a status -1
-            console.log("No selection !!");
+            logThis("No selection !!");
             return false;
         }
 
@@ -934,16 +1008,16 @@ MuseScore {
         });
         if (tupletChords.length == 0) {
             // a selection but no tuplets
-            console.log("No tuplets in selection");
+            logThis("No tuplets in selection");
             return tupletChords;
         }
 
         if (tupletChords.length != selection.length) {
             // no all chords/rests have tuplets ==> ERROR
-            console.log("No all chords have tuplets !!");
+            logThis("No all chords have tuplets !!");
             return false;
         }
-        console.log("All selection have tuplets");
+        logThis("All selection have tuplets");
 
         // checking if we are dealing with 1 tuplet
         var tuplet = tupletChords[0].tuplet;
@@ -955,13 +1029,13 @@ MuseScore {
                 parts.push(e);
             }
         };
-        console.log(selection.length + " elements; " + parts.length + " parts");
+        logThis(selection.length + " elements; " + parts.length + " parts");
         // looking if all the elements **of the first tuplet** can be found in the selection
         var remainingp = parts.filter(function (e) {
-            console.log("filtering parts: " + e.parent.tick);
+            logThis("filtering parts: " + e.parent.tick);
             var found = false;
             for (var j = 0; j < selection.length; j++) {
-                // console.log("filtering parts: " + e.parent.tick + "/" + selection[j].parent.tick);
+                // logThis("filtering parts: " + e.parent.tick + "/" + selection[j].parent.tick);
                 if (selection[j].parent.tick == e.parent.tick) {
                     found = true;
                     break;
@@ -974,7 +1048,7 @@ MuseScore {
         var remainingc = selection.filter(function (e) {
             var found = false;
             for (var j = 0; j < parts.length; j++) {
-                // console.log("filtering selection: " + e.parent.tick + "/" + parts[j].parent.tick);
+                // logThis("filtering selection: " + e.parent.tick + "/" + parts[j].parent.tick);
                 if (parts[j].parent.tick == e.parent.tick) {
                     found = true;
                     break;
@@ -982,17 +1056,17 @@ MuseScore {
             }
             return !found;
         });
-        console.log("Have we found enverything ? Remaining parts:" + remainingp.length + " parts, Remaining selection:" + remainingc.length + " chords");
+        logThis("Have we found enverything ? Remaining parts:" + remainingp.length + " parts, Remaining selection:" + remainingc.length + " chords");
 
         // 16/3/22: no testing this one any more. All I care is that my selection belongs to 1 and only 1 tuplet.
         // if ((remainingp.length != 0) || (remainingc.length != 0)) {
         if ((remainingc.length != 0)) {
             // all chords/rests are not part of the same tuplet ==> ERROR
-            console.log("The selection belongs to different tuplets.");
+            logThis("The selection belongs to different tuplets.");
             return false;
         }
 
-        console.log("Returning implicy selected tuplet chords elements");
+        logThis("Returning implicy selected tuplet chords elements");
         // return tupletChords;
         return parts; // returning all the tuplet elements
     } // getTupletsFromSelection
@@ -1005,34 +1079,99 @@ MuseScore {
         if (selection.length == 0)
             return false;
 
-        var cur_time = selection[0].parent.tick;
-        var cursor = curScore.newCursor();
-        cursor.track = selection[0].track;
-        cursor.rewindToTick(cur_time);
+        selection.sort(function (a, b) {
+            if (a.parent.tick === b.parent.tick)
+                return a.track - b.track;
+            return a.parent.tick - b.parent.tick;
+        });
 
-        //debug
-        console.log("ticks: " + selection.map(function (e) {
-                return e.parent.tick;
-            }).join(" - "));
+        // grouping stuff by tracks
+        var tracks = {};
+        for (var i = 0; i < selection.length; i++) {
+            var e = selection[i];
+            var t = e.track;
+            if (tracks[t] === undefined)
+                tracks[t] = {
+                    track: t,
+                    chords: [],
+                    duration: null
+                }
+            tracks[t].chords.push(e);
+        }
+		
+		// .. flatten this into an array
+		tracks = Object.keys(tracks).map(function (e) {
+		    return tracks[e];
+		});
 
-        console.log("0) " + selection[0].parent.tick);
+        // verifying the coherence of all the tracks
+        logThis("Candidate tuplet selection on tracks: " + Object.keys(tracks));
 
-        for (var i = 1; i < selection.length; i++) {
-            var sel = selection[i];
-            console.log(i + ") " + sel.parent.tick);
-            var next = moveNextInMeasure(cursor) ? cursor.element : null;
+        for (var it = 0; it < tracks.length; it++) {
+            var track = tracks[it];
+            // sorting by ascending tick
+            track.chords = track.chords.sort(function (a, b) {
+                return a.parent.tick - b.parent.tick;
+            });
 
-            if ((next == null) || (sel.parent.tick != next.parent.tick)) {
-                console.log("Selection mistmatch: expecting " + sel.parent.tick + ", found: " + ((next != null) ? next.parent.tick : "null"));
+            var selt = track.chords;
+
+            // ensuring all tuplets candidates are starting at the same tick
+            track.first_tick = selt[0].parent.tick;
+
+            if (it > 0 && tracks[it - 1].first_tick !== track.first_tick) {
+                logThis("Multi track selection does not start at the same tick");
                 return false;
-            } else {
-                console.log("Selection match: expecting " + sel.parent.tick + ", found: " + next.parent.tick + " (" + next.userName() + ")");
-
             }
+
+            // computing duration and ensuring an equal duration
+            track.duration = 0;
+            track.samedur = 0;
+            for (var i = 0; i < track.chords.length; i++) {
+                var dur = durationTo64(track.chords[i].duration);
+                track.duration += dur;
+                logThis("To tuplets elements: " + track.chords[i].userName() + " with duration " + dur);
+                if (track.samedur == 0)
+                    track.samedur = dur;
+                else if ((track.samedur > 0) && (track.samedur !== dur))
+                    track.samedur = -1;
+            }
+
+            if (it > 0 && tracks[it - 1].duration !== track.duration) {
+                logThis("Multi track selection does not have the same duration");
+                return false;
+            }
+
+            //debug
+            logThis("ticks: " + selection.map(function (e) {
+                    return e.parent.tick + "/" + e.track;
+                }).join(" - "));
+
+            // looking for consecutiveness of notes
+            var cursor = curScore.newCursor();
+            cursor.track = track.track;
+            cursor.rewindToTick(track.first_tick);
+
+            logThis("0) " + selt[0].parent.tick + "/" + selt[0].track);
+
+            for (var i = 1; i < selt.length; i++) {
+                var sel = selt[i];
+                logThis(i + ") " + sel.parent.tick);
+                var next = moveNextInMeasure(cursor) ? cursor.element : null;
+
+                if ((next == null) || (sel.parent.tick != next.parent.tick)) {
+                    logThis("Selection mistmatch: expecting " + sel.parent.tick + ", found: " + ((next != null) ? next.parent.tick : "null"));
+                    return false;
+                } else {
+                    logThis("Selection match: expecting " + sel.parent.tick + ", found: " + next.parent.tick + " (" + next.userName() + ")");
+
+                }
+            }
+
         }
 
-        console.log("The selection is valid");
-        return selection;
+        logThis("The selection is valid");
+        return tracks;
 
     } // getTupletsCandidates
 
@@ -1040,11 +1179,11 @@ MuseScore {
         var chords = SelHelper.getChordsRestsFromCursor();
 
         if (chords && (chords.length > 0)) {
-            console.log("CHORDS FOUND FROM CURSOR");
+            logThis("CHORDS FOUND FROM CURSOR");
         } else {
             chords = SelHelper.getChordsRestsFromSelection();
             if (chords && (chords.length > 0)) {
-                console.log("CHORDS FOUND FROM SELECTION");
+                logThis("CHORDS FOUND FROM SELECTION");
             } else
                 chords = [];
         }
@@ -1060,7 +1199,7 @@ MuseScore {
 
         // for(var i=0;i<chords.length;i++) {
         // var el=chords[i];
-        // console.log(el.track+": "+el.parent.tick+": "+el.userName());
+        // logThis(el.track+": "+el.parent.tick+": "+el.userName());
         // }
 
         return chords;
@@ -1072,19 +1211,19 @@ MuseScore {
         var base = analyze.base;
         var ratio = analyze.ratio;
 
-        console.log(target + " : " + base + "/" + ratio);
+        logThis(target + " : " + base + "/" + ratio);
 
         selectCursor(cursor);
         var cmdline = "pad-note-" + (64 / base);
-        console.log("CMD: cmd(\"" + cmdline + "\")");
+        logThis("CMD: cmd(\"" + cmdline + "\")");
         cmd(cmdline);
 
         if (analyze.half != null) {
-            console.log("Dealing with \"1.25\" ratio (" + ratio + ")");
+            logThis("Dealing with \"1.25\" ratio (" + ratio + ")");
             base = base / 2;
 
             cmdline = "pad-note-" + (64 / base);
-            console.log("CMD: cmd(\"" + cmdline + "\")");
+            logThis("CMD: cmd(\"" + cmdline + "\")");
             cmd(cmdline);
 
             moveNextInMeasure(cursor);
@@ -1095,27 +1234,27 @@ MuseScore {
 
         switch (ratio) {
         case 1.5:
-            console.log("CMD: cmd(\"pad-dot\")");
+            logThis("CMD: cmd(\"pad-dot\")");
             cmd("pad-dot")
             break;
         case 1.75:
-            console.log("CMD: cmd(\"pad-dotdot\")");
+            logThis("CMD: cmd(\"pad-dotdot\")");
             cmd("pad-dotdot")
             break;
 
         case 1.875:
-            console.log("CMD: cmd(\"pad-dot3\")");
+            logThis("CMD: cmd(\"pad-dot3\")");
             cmd("pad-dot3")
             break;
         case 1.9375:
-            console.log("CMD: cmd(\"pad-dot4\")");
+            logThis("CMD: cmd(\"pad-dot4\")");
             cmd("pad-dot4")
             break;
         case 1:
             // 0 is normal. No reason to complain about.
             break;
         default:
-            console.log("!! Cannot find a dot for " + ratio);
+            logThis("!! Cannot find a dot for " + ratio);
         }
 
     }
@@ -1176,17 +1315,17 @@ MuseScore {
         // We don't have enough, so we increase by what's msiing
         var sig = measure.timesigActual;
         var sigNum = sigTo64(sig) + increment;
-        console.log("Increasing from " + sigTo64(sig) + " to " + sigNum);
+        logThis("Increasing from " + sigTo64(sig) + " to " + sigNum);
 
         startCmd(cursor.score, "appendRest");
-        console.log("CMD: Modify timesigActual");
+        logThis("CMD: Modify timesigActual");
         measure.timesigActual = fraction(sigNum, 64);
         debugMeasureLength(measure);
         endCmd(cursor.score, "appendRest");
 
         /*var tick = Math.min(measure.lastSegment.tick, cursor.score.lastSegment.tick - 1); // BUG in MS, One cannot rewind to the last score tick
 
-        console.log(measure.lastSegment.tick + " vs. " + cursor.score.lastSegment.tick);
+        logThis(measure.lastSegment.tick + " vs. " + cursor.score.lastSegment.tick);
         cursor.rewindToTick(tick);
         cursor.prev();
         selectCursor(cursor);
@@ -1195,7 +1334,7 @@ MuseScore {
         //var last = cursor.element;
         //var last = _d(cursor.segment, cursor.track);
         var last = getPreviousRest(measure.lastSegment, cursor.track);
-        console.log(" last : " + ((last !== null) ? last.userName() : " / "));
+        logThis(" last : " + ((last !== null) ? last.userName() : " / "));
 
         if (last != null) {
             // var orig = durationTo64(last.duration); //
@@ -1219,7 +1358,7 @@ MuseScore {
         // 1) S'assurer qu'on ne veut pas supprimer plus que la longueur nominale de la mesure
         var sigA = sigTo64(measure.timesigActual);
         var theoreticalMax = sigTo64(measure.timesigNominal);
-        console.log("Required decrement is : " + increment + ", current available in measure is : " + (sigA - theoreticalMax)); // 16/3/22: was 64
+        logThis("Required decrement is : " + increment + ", current available in measure is : " + (sigA - theoreticalMax)); // 16/3/22: was 64
         increment = sigA - Math.max(sigA - increment, theoreticalMax); // 16/3/22: was 64
         // réduction au-delà de ce qui est disponible, on ne fait rien
         if (increment <= 0)
@@ -1227,7 +1366,7 @@ MuseScore {
 
         // 2) Computing available rest duration
         var available = computeRemainingRest(measure, null); //  we count the available rest, **whathever the tracks**
-        console.log("Required decrement is : " + increment + ", current available as rest is : " + available);
+        logThis("Required decrement is : " + increment + ", current available as rest is : " + available);
 
         increment = Math.min(increment, available);
         // réduction au-delà de ce qui est disponible, on ne fait rien
@@ -1243,8 +1382,8 @@ MuseScore {
             var orig = durationTo64(element.duration);
             if (orig <= remaining) {
                 cursor.score.selection.select(element);
-                console.log("CMD: cmd(\"time-delete\")");
-				cmd("time-delete");
+                logThis("CMD: cmd(\"time-delete\")");
+                cmd("time-delete");
                 remaining -= orig;
             } else {
                 // The rest is too big. Splitting it in 2.
@@ -1252,13 +1391,13 @@ MuseScore {
                 var tick = element.parent.tick;
                 cursor.rewindToTick(tick);
                 cursorToDuration(cursor, split);
-                console.log("Element too big for time-delete (looking for " + increment + ", found " + orig + ") => splitting it");
+                logThis("Element too big for time-delete (looking for " + increment + ", found " + orig + ") => splitting it");
             }
 
         }
 
         if (remaining > 0) {
-            console.log("!! Couldn't time-delete all. Looking for " + increment + ", remaining is " + remaining);
+            logThis("!! Couldn't time-delete all. Looking for " + increment + ", remaining is " + remaining);
         }
 
         increment -= remaining; // keep aligned how I will reduce the measure to what I have been able to time-delete
@@ -1266,25 +1405,25 @@ MuseScore {
         // 4) Adapting the measure length
         var target = sigA - increment;
         startCmd(cursor.score, "removeRest");
-        console.log("CMD: Modify timesigActual");
+        logThis("CMD: Modify timesigActual");
         measure.timesigActual = fraction(target, 64);
         endCmd(cursor.score, "removeRest");
         debugMeasureLength(measure);
 
     }
 
-	/**
-	 * Effective duration of an element (so taking into account the tuplet it belongs to)
-	 */
-	function elementTo64Effective(element) {
-	    // if (!element.duration)
-	        // return 0;
-	    var dur = durationTo64(element.duration);
-	    if (element.tuplet !== null) {
-			dur=dur * element.tuplet.normalNotes / element.tuplet.actualNotes;
-	    }
-	    return dur;
-	}
+    /**
+     * Effective duration of an element (so taking into account the tuplet it belongs to)
+     */
+    function elementTo64Effective(element) {
+        // if (!element.duration)
+        // return 0;
+        var dur = durationTo64(element.duration);
+        if (element.tuplet !== null) {
+            dur = dur * element.tuplet.normalNotes / element.tuplet.actualNotes;
+        }
+        return dur;
+    }
     function durationTo64(duration) {
         return 64 * duration.numerator / duration.denominator;
     }
@@ -1301,7 +1440,7 @@ MuseScore {
         var last = measure.lastSegment;
         var duration = 0;
 
-        console.log("Analyzing track " + (((track !== undefined) && (track != null)) ? track : "all") + ", above " + (abovetick ? abovetick : "-1"));
+        logThis("Analyzing track " + (((track !== undefined) && (track != null)) ? track : "all") + ", above " + (abovetick ? abovetick : "-1"));
 
         if ((track !== undefined) && (track != null)) {
             duration = _computeRemainingRest(measure, track, abovetick);
@@ -1311,9 +1450,9 @@ MuseScore {
             duration = 999;
             // Analyze made on all tracks
             for (var t = 0; t < curScore.ntracks; t++) {
-                console.log(">>>> " + t + "/" + curScore.ntracks + " <<<<");
+                logThis(">>>> " + t + "/" + curScore.ntracks + " <<<<");
                 var localavailable = _computeRemainingRest(measure, t, abovetick);
-                console.log("Available at track " + t + ": " + localavailable + " (" + duration + ")");
+                logThis("Available at track " + t + ": " + localavailable + " (" + duration + ")");
                 duration = Math.min(duration, localavailable);
                 if (duration == 0)
                     break;
@@ -1334,7 +1473,7 @@ MuseScore {
         // setting the limit until which to look for rests
         abovetick = (abovetick === undefined) ? -1 : abovetick;
 
-        console.log("- Analyzing track " + (((track !== undefined) && (track != null)) ? track : "all") + ", above " + (abovetick ? abovetick : "-1"));
+        logThis("_computeRemainingRest: " + (((track !== undefined) && (track != null)) ? track : "all") + ", above tick " + (abovetick ? abovetick : "-1"));
 
         if ((track !== undefined) && (track != null)) {
             // Analyze limited to one track
@@ -1344,34 +1483,34 @@ MuseScore {
                 // if ((element != null) && ((element.type == Element.CHORD) )) {
                 if ((element != null) && ((element.type == Element.CHORD) || (last.tick <= abovetick))) { // 16/3/22
                     if (inTail)
-                        console.log("switching outside of available buffer");
+                        logThis("switching outside of available buffer");
                     // As soon as we encounter a Chord, we leave the "rest-tail"
                     inTail = false;
                 }
                 if ((element != null) && ((element.type == Element.REST) || (element.type == Element.CHORD)) && !inTail) {
                     // When not longer in the "rest-tail" we decrease the remaing length by the element duration
-					// var eldur=durationTo64(element.duration);
-						// 1.3.0 take into account the effective dur of the element when within a tuplet
-					var eldur=elementTo64Effective(element);
+                    // var eldur=durationTo64(element.duration);
+                    // 1.3.0 take into account the effective dur of the element when within a tuplet
+                    var eldur = elementTo64Effective(element);
                     duration -= eldur;
                 }
                 last = last.prevInMeasure;
             }
         }
-		
-		duration=Math.round(duration);
+
+        duration = Math.round(duration);
         return duration;
     }
 
     function _d(last, track) {
         var el = last.elementAt(track);
-        console.log(" At " + last.tick + ": " + ((el !== null) ? el.userName() : " / "));
+        logThis(" At " + last.tick + "/" + track + ": " + ((el !== null) ? el.userName() : " / "));
         return el;
     }
 
     /*function selectCursor(cursor) {
     var el = cursor.element;
-    //console.log(el.duration.numerator + "--"+el.duration.denominator);
+    //logThis(el.duration.numerator + "--"+el.duration.denominator);
     if (el.type === Element.CHORD)
     el = el.notes[0];
     else if (el.type !== Element.REST)
@@ -1382,7 +1521,7 @@ MuseScore {
 
     function selectCursor(cursor) {
         var el = cursor.element;
-        //console.log(el.duration.numerator + "--"+el.duration.denominator);
+        //logThis(el.duration.numerator + "--"+el.duration.denominator);
         if (el == null) {
             return false;
         } else if (el.type === Element.CHORD) {
@@ -1479,6 +1618,7 @@ MuseScore {
      *
      */
     function selectRemaingInMeasure(cursor, include) {
+        logThis("selectRemaingInMeasure: ");
         var measure = cursor.measure;
         //var first = cursor.segment.nextInMeasure;
         var first = (include === undefined || !include) ? cursor.segment.nextInMeasure : cursor.segment;
@@ -1492,7 +1632,7 @@ MuseScore {
         var element;
         var the_real_last = last;
         //while ((last!=null) && (((element = last.elementAt(track)) == null) || (element.type == Element.REST))) {
-        while ((last != null) && (((element = _d(last, cursor.track)) == null) || ((element.type != Element.CHORD) && (element.tuplet===null)) )) {  // 1.3.0 un élement dans un tuplet, on arrête
+        while ((last != null) && (((element = _d(last, cursor.track)) == null) || ((element.type != Element.CHORD) && (element.tuplet === null)))) { // 1.3.0 un élement dans un tuplet, on arrête
             if (element != null)
                 the_real_last = last;
             last = last.prevInMeasure;
@@ -1503,14 +1643,14 @@ MuseScore {
         // debug:
         for (var t = 0; t < cursor.score.ntracks; t++) {
             var el = first.elementAt(t);
-            console.log(t + ")" + ((el !== null) ? el.userName() : " / "));
+            logThis(t + ")" + ((el !== null) ? el.userName() : " / "));
         }
 
-        console.log("Select from " + first.tick + " to " + last.tick + " ?");
+        logThis("Select from " + first.tick + " to " + last.tick + " ?");
 
         if (last.tick <= first.tick) {
             // Working at the end of the measure, we don't copy/paste
-            console.log("-->No. Clear selection.");
+            logThis("-->No. Clear selection.");
             startCmd(cursor.score, "clear selection");
             cursor.score.selection.clear();
             endCmd(cursor.score, "clear selection");
@@ -1530,47 +1670,47 @@ MuseScore {
             res = cursor.score.selection.selectRange(first.tick, tick, cursor.staffIdx, cursor.staffIdx + 1);
 
         } else {
-			// 9/5/22 tentative, mais ne fonctionne pas: la sélection et le cut fonctionnent, mais pas le paste. 
+            // 9/5/22 tentative, mais ne fonctionne pas: la sélection et le cut fonctionnent, mais pas le paste.
 
-        cursor.score.selection.clear();
-        var curstmp = cursor.score.newCursor();
-			
-			res=false;
+            cursor.score.selection.clear();
+            var curstmp = cursor.score.newCursor();
 
-            console.log("--> Yes. Selecting from " + first.tick + "/" + cursor.track + " to " + tick + "/" + cursor.track);
+            res = false;
 
-        curstmp.rewindToTick(first.tick);
+            logThis("--> Yes. Selecting from " + first.tick + "/" + cursor.track + " to " + tick + "/" + cursor.track);
+
+            curstmp.rewindToTick(first.tick);
             // curstmp.filter = Segment.All;
-            curstmp.filter = Segment.ChordRest ;
-        var seg = curstmp.segment;
-        while (seg != null && seg.tick <= tick) {
-				console.log("---- at tick "+seg.tick);
+            curstmp.filter = Segment.ChordRest;
+            var seg = curstmp.segment;
+            while (seg != null && seg.tick <= tick) {
+                logThis("---- at tick " + seg.tick);
                 // var el = seg.elementAt(t, true); // ??? "true" ???
-                // var el = findElementAt(seg, cursor.track);
-                var el = seg.elementAt(cursor.track); 
+                // var el = _d(seg, cursor.track); //
+                var el = seg.elementAt(cursor.track);
                 if ((el != null) && (el.parent.tick === seg.tick)) {
                     if (el.type === Element.CHORD) {
-        var cnotes = el.notes;
-        for (var j = 0; j<cnotes.length; j++) {
-                            var r=cursor.score.selection.select(cnotes[j],true);
-        console.log("adding "+cnotes[j].userName()+" ("+el.parent.tick+") to selection");
-							res=res||r;
-        }
+                        var cnotes = el.notes;
+                        for (var j = 0; j < cnotes.length; j++) {
+                            var r = cursor.score.selection.select(cnotes[j], true);
+                            logThis("adding " + cnotes[j].userName() + " (" + el.parent.tick + ") to selection");
+                            res = res || r;
+                        }
                     } else {
-        console.log("adding "+el.userName()+" ("+el.parent.tick+") to selection");
-                        var r=cursor.score.selection.select(el,true);
-							res=res||r;
+                        logThis("adding " + el.userName() + " (" + el.parent.tick + ") to selection");
+                        var r = cursor.score.selection.select(el, true);
+                        res = res || r;
                     }
 
                     if ((el.elements) && (el.elements.length > 0)) {
                         var celements = el.elements;
                         for (var j = 0; j < celements.length; j++) {
-                            cursor.score.selection.select(celements[j],true);
-                            console.log("adding " + celements[j].userName() + " (" + el.parent.tick + ") to selection");
+                            cursor.score.selection.select(celements[j], true);
+                            logThis("adding " + celements[j].userName() + " (" + el.parent.tick + ") to selection");
                         }
                     }
                 } else {
-                    console.log("no element found at this tick "+((el!=null)?("("+el.parent.tick+")"):""));
+                    logThis("no element found at this tick " + ((el != null) ? ("(" + el.parent.tick + ")") : ""));
                 }
 
                 // seg = seg.next;
@@ -1600,7 +1740,7 @@ MuseScore {
         element = the_real_last.elementAt(track);
 
         if ((element == null) || (element.type != Element.REST)) {
-            console.log("Could not find a rest at the end of the measure");
+            logThis("Could not find a rest at the end of the measure");
             return null;
         }
 
@@ -1636,7 +1776,7 @@ MuseScore {
         //modal: true
         standardButtons: Dialog.Save | Dialog.Cancel
 
-        property var chords
+        property var tracksdata
         property var duration
         property var measureType
         property alias tupletN: txtTupletN.text
@@ -1694,7 +1834,7 @@ MuseScore {
         onAccepted: {
             var tN = parseInt(txtTupletN.text);
             var tD = parseInt(txtTupletD.text);
-            console.log("==> " + tN + ":" + tD);
+            logThis("==> " + tN + ":" + tD);
 
             if ((tN !== tN) || (tD !== tD)) { // testing NaN
                 warningDialog.subtitle = "Tuplet conversion";
@@ -1704,24 +1844,32 @@ MuseScore {
             }
             manualTupletDefinitionDialog.close();
 
-            convertChordsToTuplets_Exectute(chords, duration, measureType, tN, tD);
+            convertChordsToTuplets_Exectute(tracksdata, duration, measureType, tN, tD);
         }
         onRejected: manualTupletDefinitionDialog.close();
 
     }
 
-	function debugCursor(cursor, label) {
-		var l=(label!==undefined)?(label+": "):"";
-        console.log(l + "cursor at: " + cursor.tick+"/"+cursor.track);
-	}
+    function logThis(text) {
+        console.log(text);
+
+        if (debug) {
+            logn(text);
+        }
+
+    }
+    function debugCursor(cursor, label) {
+        var l = (label !== undefined) ? (label + ": ") : "";
+        logThis(l + "cursor at: " + cursor.tick);
+    }
 
     function debugMeasureLength(measure) {
-        console.log(measure.timesigNominal.str + " // " + measure.timesigActual.str);
+        logThis(measure.timesigNominal.str + " // " + measure.timesigActual.str);
     }
 
     function debugSegment(segment, track) {
         var el = (segment !== null) ? segment.elementAt(track) : null;
-        console.log("segment (" + ((segment !== null) ? segment.tick : "null") + ") =" +
+        logThis("segment (" + ((segment !== null) ? segment.tick : "null") + ") =" +
             ((segment !== null) ? segment.segmentType : "null") +
             " (with " + ((el !== null) ? el.userName() : "null") +
             " on track " + track + ")");
@@ -1729,12 +1877,12 @@ MuseScore {
 
     function startCmd(score, comment) {
         score.startCmd();
-        console.log(">>>>>>>>>> START CMD " + (comment ? ("(" + comment + ") ") : "") + ">>>>>>>>>>>>>>>>>");
+        logThis(">>>>>>>>>> START CMD " + (comment ? ("(" + comment + ") ") : "") + ">>>>>>>>>>>>>>>>>");
     }
 
     function endCmd(score, comment) {
         score.endCmd();
-        console.log("<<<<<<<<<< END CMD " + (comment ? ("(" + comment + ") ") : "") + "<<<<<<<<<<<<<<<<<");
+        logThis("<<<<<<<<<< END CMD " + (comment ? ("(" + comment + ") ") : "") + "<<<<<<<<<<<<<<<<<");
     }
 
     function debugO(label, element, excludes, isinclude) {
@@ -1746,9 +1894,9 @@ MuseScore {
         }
 
         if (typeof element === 'undefined') {
-            console.log(label + ": undefined");
+            logThis(label + ": undefined");
         } else if (element === null) {
-            console.log(label + ": null");
+            logThis(label + ": null");
 
         } else if (Array.isArray(element)) {
             for (var i = 0; i < element.length; i++) {
@@ -1764,7 +1912,12 @@ MuseScore {
                 }
             }
         } else {
-            console.log(label + ": " + element);
+            logThis(label + ": " + element);
         }
+    }
+
+    FileIO {
+        id: logfile
+        source: tempPath() + "/durationeditor.log" // = TEMP folder
     }
 }
