@@ -38,7 +38,7 @@ MuseScore {
     readonly property var selHelperVersion: "1.2.2"
     readonly property var noteHelperVersion: "1.0.5"
 
-    readonly property var debug: true
+    readonly property var debug: false
 
     pluginType: "dock"
     dockArea: "left"
@@ -389,7 +389,6 @@ MuseScore {
      * newDuration==0: delete the element
      * newDuration<0: insert a rest before the element with that duration
      */
-	 // TODO Adapt code of a single voice adaptation (multivoice)
     function setElementDuration(element, newDuration, multivoice) {
 
         if (element.tuplet !== null) {
@@ -420,22 +419,26 @@ MuseScore {
             logThis("Required increment is : " + increment + ", current buffer is : " + buffer);
 
             // 1) on coupe ce qu'on va déplacer
+			var localCopy;
             var doCutPaste = selectRemaingInMeasure(cursor, insertmode, multivoice);
             if (doCutPaste) {
-				if (multivoice) {
-                logThis("CMD: cmd(\"cut\")");
-                cmd("cut");
-				} else {
-					// TODO: SingleVoice cut
-                logThis("TODO: SingleVoice cut");
-				}
+                if (multivoice) {
+                    logThis("CMD: cmd(\"cut\")");
+                    cmd("cut");
+                } else {
+                    logThis("SingleVoice cut");
+                    localCopy = copySelection(score.selection.elements);
+                    // logThis("CMD: cmd(\"delete\")");
+                    // cmd("delete");
+                    logThis("CMD: cmd(\"pad-rest\")");
+                    cmd("pad-rest");
+                }
             }
-
             // 2) on adapte la longueur de la mesure (si on n'a pas assez de buffer)
             if (buffer < increment) {
                 var delta = increment - buffer;
                 logThis("buffer is < increment => adding a rest of " + delta);
-                appendRest(cursor, delta);
+                appendRest(cursor, delta, multivoice);
             } else {
                 logThis("buffer is >= increment => no need to add a rest");
             }
@@ -450,6 +453,7 @@ MuseScore {
 
             // 4) s'occuper des autres voix (uniquement quand la durée augmente)
             // 1.3.0
+			if(multivoice) {
             var t_cursor = cursor.score.newCursor();
             t_cursor.rewindToTick(cur_time);
             var seg = t_cursor.segment;
@@ -467,6 +471,7 @@ MuseScore {
                 t_cursor.track = t;
                 cursorToDuration(t_cursor, t_newdur);
             }
+			}
 
             // 5) On fait le paste
             if (doCutPaste) {
@@ -481,8 +486,8 @@ MuseScore {
                     logThis("CMD: cmd(\"paste\")");
                     cmd("paste");
                 } else {
-                    // TODO: SingleVoice paste
-                    logThis("TODO: SingleVoice paste");
+                    logThis("SingleVoice paste");
+					pasteSelection(cursor, localCopy);
                 }
             }
             //endCmd(score);
@@ -491,18 +496,20 @@ MuseScore {
         if (increment < 0) {
 
             // 1) on coupe ce qu'on va déplacer
+			var localCopy;
             var doCutPaste = selectRemaingInMeasure(cursor, false, multivoice);
 
             if (doCutPaste) {
-				if (multivoice) {
-                logThis("CMD: cmd(\"cut\")");
-                cmd("cut");
-				} else {
-					// TODO: SingleVoice cut
-                logThis("TODO: SingleVoice cut");
-				}
+                if (multivoice) {
+                    logThis("CMD: cmd(\"cut\")");
+                    cmd("cut");
+                } else {
+                    logThis("SingleVoice cut");
+                    localCopy = copySelection(score.selection.elements);
+                    logThis("CMD: cmd(\"delete\")");
+                    cmd("delete");
+                }
             }
-
             // 2) on adapte la durée de la note
             cursor.rewindToTick(cur_time);
             if (newDuration != 0)
@@ -527,8 +534,8 @@ MuseScore {
                     logThis("CMD: cmd(\"paste\")");
                     cmd("paste");
                 } else {
-                    // TODO: SingleVoice paste
-                    logThis("TODO: SingleVoice paste");
+                    logThis("SingleVoice paste");
+					pasteSelection(cursor, localCopy);
                 }
             }
 
@@ -916,23 +923,28 @@ MuseScore {
     }
 
     function copySelection(chords) {
+		logThis("Copying "+chords.length+" elements");
         var targets = [];
         for (var i = 0; i < chords.length; i++) {
             var chord = chords[i];
+			if(chord.type===Element.NOTE) chord=chord.parent;
+            logThis("Copying " + i + ": " + chord.userName() + " - "+ (chord.duration?chord.duration.str:"null") + ", notes: " + (chord.notes ? chord.notes.length : 0));
             var target = {
-                "duration": {
+                "duration": (chord.duration?{
                     "numerator": chord.duration.numerator,
                     "denominator": chord.duration.denominator,
-                },
+                }:null),
                 "lyrics": chord.lyrics,
                 "graceNotes": chord.graceNotes,
+				"_username": chord.userName(),
+				"userName": function() { return this._username;} //must be "chords[i]"
             };
             // If CHORD, then remember the notes. Otherwise treat as a rest
             if (chord.type === Element.CHORD) {
                 target.notes = chord.notes;
             };
             targets.push(target);
-            logThis("--Lyrics: " + target.lyrics.length + ((target.lyrics.length > 0) ? (" (\"" + target.lyrics[0].text + "\")") : ""));
+            // logThis("--Lyrics: " + target.lyrics.length + ((target.lyrics.length > 0) ? (" (\"" + target.lyrics[0].text + "\")") : ""));
         }
 
         return targets;
@@ -940,11 +952,13 @@ MuseScore {
     }
 
     function pasteSelection(cursor, targets) {
+        startCmd(curScore, "pasteSelection");
+		logThis("Pasting "+targets.length+" elements at "+cursor.tick+"/"+cursor.track);
         for (var i = 0; i < targets.length; i++) {
             var target = targets[i];
             //var target = chords[i]; // TEST - DIRECTEMENT UTILISER LES NOTES MEMEORISEES --> KO (du moins sur les durées)
             var tick = cursor.tick;
-            //logThis("Target " + i + ": " + target.duration.numerator + "/" + target.duration.denominator + ", notes: " + (target.notes ? target.notes.length : 0));
+            logThis("Pasting " + i + ": " + target.userName() + " - "+ target.duration.numerator + "/" + target.duration.denominator + ", notes: " + (target.notes ? target.notes.length : 0));
 
             if (target.notes && target.notes.length > 0) {
                 var pitches = [];
@@ -957,32 +971,45 @@ MuseScore {
                     };
                     pitches.push(n);
                 }
-                startCmd(curScore, "restToChord"); //DEBUG
+                // startCmd(curScore, "restToChord"); //DEBUG
+				logThis("- pasting the notes");
                 NoteHelper.restToChord(cursor.element, pitches, true); // with keepRestDuration=true
-                endCmd(curScore, "restToChord"); // DEBUG
+                // endCmd(curScore, "restToChord"); // DEBUG
             }
 
-            //logThis("note duration modification: "+durationTo64(cursor.element.duration)+" --> "+durationTo64(target.duration));
-            startCmd(curScore, "adapt duration"); //DEBUG
+			logThis("- adapting duration");
+            // startCmd(curScore, "adapt duration"); //DEBUG
             cursor.rewindToTick(tick);
+			// w/a setting to a duration < what we need to force a change
+            cursorToDuration(cursor, durationTo64(target.duration)/2);
             cursorToDuration(cursor, durationTo64(target.duration));
             var current = cursor.element;
             // debugO("Target", target,["lyrics","notes"],true);
-            logThis("####Lyrics: " + target.lyrics.length + ((target.lyrics.length > 0) ? (" (\"" + target.lyrics[0].text + "\")") : "") + " on " + current.userName());
+            logThis("- adding the lyrics: " + target.lyrics.length + ((target.lyrics.length > 0) ? (" (\"" + target.lyrics[0].text + "\")") : "") + " on " + current.userName());
             if (typeof(target.lyrics) !== "undefined") {
                 for (var j = 0; j < target.lyrics.length; j++) {
                     var lorig = target.lyrics[j];
-                    logThis("adding a lyric: \"" + lorig.text + "\"");
+                    logThis("-- adding a lyric: \"" + lorig.text + "\"");
                     // current.add(lorig); // no error but the lyric is not to be seen
                     var lnew = newElement(Element.LYRICS);
                     lnew.text = lorig.text;
                     current.add(lnew);
                 }
             }
-            endCmd(curScore, "adapt duration"); // DEBUG
+            // endCmd(curScore, "adapt duration"); // DEBUG
 
-            moveNext(cursor);
+            cursor.rewindToTick(tick);
+			
+			// Moving to next segment, in the *same measure*. 
+			moveNext(cursor); 
+			// // We assume the measure has been prepared to accept what we need to paste.
+            // if (!moveNextInMeasure(cursor)) {
+				// if (i<(targets.length-1)) 
+				// logThis("End of measure reached, not pasting the remaining elements");
+				// break;
+			// }
         }
+		endCmd(curScore, "pasteSelection");
 
     }
 
@@ -1432,7 +1459,7 @@ MuseScore {
     /**
      * Add the desired duration at the end of the measure.
      */
-    function appendRest(cursor, increment) {
+    function appendRest(cursor, increment, multivoice) {
         var measure = cursor.measure;
         debugMeasureLength(measure);
 
@@ -1448,7 +1475,6 @@ MuseScore {
         logThis("CMD: Modify timesigActual");
         measure.timesigActual = fraction(sigNum, 64);
         debugMeasureLength(measure);
-        endCmd(cursor.score, "appendRest");
 
         /*var tick = Math.min(measure.lastSegment.tick, cursor.score.lastSegment.tick - 1); // BUG in MS, One cannot rewind to the last score tick
 
@@ -1460,17 +1486,28 @@ MuseScore {
 
         //var last = cursor.element;
         //var last = _d(cursor.segment, cursor.track);
-        var last = getPreviousRest(measure.lastSegment, cursor.track);
-        logThis(" last : " + ((last !== null) ? last.userName() : " / "));
+		
+		var fTrack=multivoice?cursor.staffIdx*4:cursor.track;
+		var lTrack=multivoice?cursor.staffIdx*4+3:cursor.track;
+		
+		for(var t=fTrack;t<=lTrack;t++) {
+		
+        var last = getPreviousRest(measure.lastSegment, t);
+        logThis(" track "+t+"'s last : " + ((last !== null) ? last.userName() : " / "));
 
         if (last != null) {
             // var orig = durationTo64(last.duration); //
             var orig = elementTo64Effective(last);
             var target = orig + increment;
             var tick = last.parent.tick;
-            cursor.rewindToTick(tick);
-            cursorToDuration(cursor, target);
+			var tcursor=cursor.score.newCursor();
+            tcursor.rewindToTick(tick);
+			tcursor.track=t;
+            cursorToDuration(tcursor, target);
         }
+		
+		}
+        endCmd(cursor.score, "appendRest");
     }
 
     /**
@@ -1758,14 +1795,24 @@ MuseScore {
         var last = measure.lastSegment;
         var element;
         var the_real_last = last;
-        //while ((last!=null) && (((element = last.elementAt(track)) == null) || (element.type == Element.REST))) {
-        while ((last != null) && (((element = _d(last, cursor.track)) == null) || ((element.type != Element.CHORD) && (element.tuplet === null)))) { // 1.3.0 un élement dans un tuplet, on arrête
-            if (element != null)
+		logThis("- searching for last non rest segment");
+		// Je remonte depuis la fin. Tant que je trouve qqch et que ce qqch n'est pas un accord ou n'est pas dans un tuplet, alors je continue à remonter
+        // while ((last != null) && (((element = _d(last, cursor.track)) == null) || ((element.type != Element.CHORD) && (element.tuplet === null)))) { // 1.3.0 un élement dans un tuplet, on arrête
+        while (last!==null)  {
+			var track=cursor.track;
+			// TODO Gérer le multivoice
+			var element= _d(last, track);
+
+            if (element != null) {
+			debugSegment(last, track, "last segment's candidate:");
+				if ((element.type === Element.CHORD) || (element.tuplet)) 
+					break;
                 the_real_last = last;
+			}
             last = last.prevInMeasure;
         }
-        //last = last.nextInMeasure;
         last = the_real_last;
+			debugSegment(last, track, "last segment's best:");
 
         // debug:
         for (var t = 0; t < cursor.score.ntracks; t++) {
@@ -1775,7 +1822,8 @@ MuseScore {
 
         logThis("Select from " + first.tick + " to " + last.tick + " ?");
 
-        if (last.tick <= first.tick) {
+        // if (last.tick <= first.tick) {
+        if (last.tick < first.tick) {
             // Working at the end of the measure, we don't copy/paste
             logThis("-->No. Clear selection.");
             startCmd(cursor.score, "clear selection");
@@ -1811,7 +1859,7 @@ MuseScore {
             // curstmp.filter = Segment.All;
             curstmp.filter = Segment.ChordRest;
             var seg = curstmp.segment;
-            while (seg != null && seg.tick <= tick) {
+            while (seg != null && seg.tick < tick) { // "<tick" pcq le dernier tick ne doit pas être inclus
                 logThis("---- at tick " + seg.tick);
                 // var el = seg.elementAt(t, true); // ??? "true" ???
                 // var el = _d(seg, cursor.track); //
@@ -1995,9 +2043,9 @@ MuseScore {
         logThis(measure.timesigNominal.str + " // " + measure.timesigActual.str);
     }
 
-    function debugSegment(segment, track) {
+    function debugSegment(segment, track, label) {
         var el = (segment !== null) ? segment.elementAt(track) : null;
-        logThis("segment (" + ((segment !== null) ? segment.tick : "null") + ") =" +
+        logThis((label?(label+" "):"")+"segment (" + ((segment !== null) ? segment.tick : "null") + ") =" +
             ((segment !== null) ? segment.segmentType : "null") +
             " (with " + ((el !== null) ? el.userName() : "null") +
             " on track " + track + ")");
