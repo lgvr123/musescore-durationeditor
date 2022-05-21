@@ -312,6 +312,9 @@ MuseScore {
         if (!chords || (chords.length == 0))
             return;
 
+		if (verifySelection(chords)<0)
+			return;
+
         setElementDuration(chords[0], newDuration, res.multivoice);
 
         if (debug) {
@@ -332,6 +335,9 @@ MuseScore {
         if (!chords || (chords.length == 0))
             return;
 
+		if (verifySelection(chords,["staff","tick"])<0)
+			return;
+
         setElementDuration(chords[0], newDuration * (-1), res.multivoice);
 
         if (debug) {
@@ -351,6 +357,9 @@ MuseScore {
 
         if (!chords || (chords.length == 0))
             return;
+
+		if (verifySelection(chords)<0)
+			return;
 
         setElementDot(chords[0], newDuration, res.multivoice);
 
@@ -391,7 +400,7 @@ MuseScore {
      */
     function setElementDuration(element, newDuration, multivoice) {
 
-        if (element.tuplet !== null) {
+        if (element.tuplet !== null && newDuration>=0) {
             warningDialog.text = "Cannot perform this action for elements within tuplets";
             warningDialog.open();
             return;
@@ -421,7 +430,8 @@ MuseScore {
             // 1) on coupe ce qu'on va déplacer
 			var localCopy;
             var doCutPaste = selectRemaingInMeasure(cursor, insertmode, multivoice);
-            if (doCutPaste) {
+            switch (doCutPaste) {
+            case 1:
                 if (multivoice) {
                     logThis("CMD: cmd(\"cut\")");
                     cmd("cut");
@@ -433,6 +443,13 @@ MuseScore {
                     logThis("CMD: cmd(\"pad-rest\")");
                     cmd("pad-rest");
                 }
+                break;
+            case -1:
+                warningDialog.subtitle = "Duration editor";
+                warningDialog.text = "The limit of the plugin have been reached.\nIt cannot perform a duration modification of a single voice context with tuplets after.";
+                warningDialog.open();
+                return;
+
             }
             // 2) on adapte la longueur de la mesure (si on n'a pas assez de buffer)
             if (buffer < increment) {
@@ -474,7 +491,7 @@ MuseScore {
 			}
 
             // 5) On fait le paste
-            if (doCutPaste) {
+            if (doCutPaste===1) {
                 // cursor.rewindToTick(cur_time);
                 cursor.rewindToTick(lastRestTick); //1.3.0
                 debugCursor(cursor, "rewind for paste");
@@ -496,10 +513,11 @@ MuseScore {
         if (increment < 0) {
 
             // 1) on coupe ce qu'on va déplacer
-			var localCopy;
+            var localCopy;
             var doCutPaste = selectRemaingInMeasure(cursor, false, multivoice);
 
-            if (doCutPaste) {
+            switch (doCutPaste) {
+            case 1:
                 if (multivoice) {
                     logThis("CMD: cmd(\"cut\")");
                     cmd("cut");
@@ -509,7 +527,15 @@ MuseScore {
                     logThis("CMD: cmd(\"delete\")");
                     cmd("delete");
                 }
+                break;
+            case -1:
+                warningDialog.subtitle = "Duration editor";
+                warningDialog.text = "The limit of the plugin have been reached.\nIt cannot perform a duration modification of a single voice context with tuplets after.";
+                warningDialog.open();
+                return;
+
             }
+
             // 2) on adapte la durée de la note
             cursor.rewindToTick(cur_time);
             if (newDuration != 0)
@@ -525,7 +551,7 @@ MuseScore {
 
 
             // 3) On fait le paste
-            if (doCutPaste) {
+            if (doCutPaste===1) {
                 cursor.rewindToTick(cur_time);
                 if (newDuration != 0)
                     cursor.next();
@@ -971,10 +997,10 @@ MuseScore {
                     };
                     pitches.push(n);
                 }
-                // startCmd(curScore, "restToChord"); //DEBUG
+                startCmd(curScore, "restToChord");
 				logThis("- pasting the notes");
                 NoteHelper.restToChord(cursor.element, pitches, true); // with keepRestDuration=true
-                // endCmd(curScore, "restToChord"); // DEBUG
+                endCmd(curScore, "restToChord");
             }
 
 			logThis("- adapting duration");
@@ -987,6 +1013,7 @@ MuseScore {
             // debugO("Target", target,["lyrics","notes"],true);
             logThis("- adding the lyrics: " + target.lyrics.length + ((target.lyrics.length > 0) ? (" (\"" + target.lyrics[0].text + "\")") : "") + " on " + current.userName());
             if (typeof(target.lyrics) !== "undefined") {
+            startCmd(curScore, "adding the lyrics");
                 for (var j = 0; j < target.lyrics.length; j++) {
                     var lorig = target.lyrics[j];
                     logThis("-- adding a lyric: \"" + lorig.text + "\"");
@@ -995,8 +1022,8 @@ MuseScore {
                     lnew.text = lorig.text;
                     current.add(lnew);
                 }
+            endCmd(curScore, "adding the lyrics");
             }
-            // endCmd(curScore, "adapt duration"); // DEBUG
 
             cursor.rewindToTick(tick);
 			
@@ -1261,11 +1288,11 @@ MuseScore {
             };
         });
 
-        // for(var i=0;i<chords.length;i++) {
-        // var el=chords[i];
-        // logThis(el.track+": "+el.parent.tick+": "+el.userName());
-        // }
-
+        for(var i=0;i<chords.length;i++) {
+        var el=chords[i];
+        logThis(el.parent.tick+": "+el.track+" ("+el.duration.str+") "+": "+el.userName());
+        }
+		
 
 		var multivoice=(curScore.selection)?curScore.selection.isRange:false;
 		if(!multivoice) multivoice=sameAsRange(chords);
@@ -1276,9 +1303,69 @@ MuseScore {
     }
 	
 	/**
+	* Tests that the selection doesn't span over
+	* - multiple ticks
+	* - multiple staves
+	* - have the same duration
+	*/
+	function verifySelection(selection, what) {
+	    if (selection.length === 0)
+	        return -1;
+
+	    // ticks
+	    if (!what || (what === "tick") || (what.indexOf("tick") > -1)) {
+
+	        var tmp = selection.map(function (e) {
+	            return e.parent.tick
+	        }).sort(function (a, b) {
+	            return a - b;
+	        });
+	        if (tmp[0] !== tmp[selection.length - 1]) {
+	            warningDialog.subtitle = "Duration editor";
+	            warningDialog.text = "Invalid selection. The selection cannot span over multiple ticks.";
+	            warningDialog.open();
+	            return -2;
+	        }
+
+	    }
+	    // staff
+	    if (!what || (what === "staff") || (what.indexOf("staff") > -1)) {
+	        tmp = selection.map(function (e) {
+	            return (e.track / 4) | 0
+	        }).sort(function (a, b) {
+	            return a - b;
+	        });
+	        console.log(tmp);
+	        if (tmp[0] !== tmp[selection.length - 1]) {
+	            warningDialog.subtitle = "Duration editor";
+	            warningDialog.text = "Invalid selection. The selection cannot span over multiple staves.";
+	            warningDialog.open();
+	            return -3;
+	        }
+	    }
+	    // duration
+	    if (!what || (what === "duration") || (what.indexOf("duration") > -1)) {
+	        tmp = selection.map(function (e) {
+	            return elementTo64Effective(e)
+	        }).sort(function (a, b) {
+	            return a - b;
+	        });
+	        console.log(tmp);
+	        if (tmp[0] !== tmp[selection.length - 1]) {
+	            warningDialog.subtitle = "Duration editor";
+	            warningDialog.text = "Invalid selection. The selection's elements must have the same duration.";
+	            warningDialog.open();
+	            return -4;
+	        }
+	    }
+	    return 0;
+
+	}
+	/**
 	* Tells whether a selection which is not of type Range (selection.isRange) can behave like a range (i.e. every elements of all the voices are selected-
 	*/ 
 	function sameAsRange(selection) {
+		logThis("Assessing if non-Range selection is similar to a range selection");
         var fTick, lTick;
         var fTrack, lTrack;
 
@@ -1777,8 +1864,8 @@ MuseScore {
     }
 
     /**
-     * Sélectionne la fin mesure à partir du curseur, y compris (include=true) ou non.
-     * @return true|false si la sélection a pu être faite
+     * Sélectionne la fin mesure à partir du curseur, non compris les derniers silences,  mais  y compris le curseur si (include=true).
+     * @return 1 si une sélection a été faite, 0 s'il n'y avait rien à sélectionner, -1 en cas d'impossibilité/erreur à sélectionner.
      *
      */
     function selectRemaingInMeasure(cursor, include, multivoice) {
@@ -1836,34 +1923,43 @@ MuseScore {
         var tick = last.tick;
         if (tick == cursor.score.lastSegment.tick)
             tick++; // Bug in MS with the end of score ticks
-        startCmd(cursor.score, "select range");
 
         var res;
         // res=cursor.score.selection.selectRange(first.tick, tick, cursor.staffIdx, cursor.staffIdx + 1);
 
         // if (chkCrossVoice.checked) {
         if (multivoice) {
+            logThis("--> Yes. Selecting from " + first.tick + "/" + (cursor.staffIdx*4) + " to " + tick + "/" + (cursor.staffIdx*4 + 3));
+			startCmd(cursor.score, "select multivoice range");
             res = cursor.score.selection.selectRange(first.tick, tick, cursor.staffIdx, cursor.staffIdx + 1);
+			endCmd(cursor.score, "select multivoice range");
 
+			return (res?1:0);
         } else {
-            // 9/5/22 tentative, mais ne fonctionne pas: la sélection et le cut fonctionnent, mais pas le paste.
 
             cursor.score.selection.clear();
             var curstmp = cursor.score.newCursor();
 
             res = false;
+			var hasTuplet=false;
 
             logThis("--> Yes. Selecting from " + first.tick + "/" + cursor.track + " to " + tick + "/" + cursor.track);
+
+			startCmd(cursor.score, "select singlevoice range");
 
             curstmp.rewindToTick(first.tick);
             // curstmp.filter = Segment.All;
             curstmp.filter = Segment.ChordRest;
             var seg = curstmp.segment;
-            while (seg != null && seg.tick < tick) { // "<tick" pcq le dernier tick ne doit pas être inclus
+            while (seg != null && seg.tick < tick && !hasTuplet) { // "<tick" pcq le dernier tick ne doit pas être inclus
                 logThis("---- at tick " + seg.tick);
                 // var el = seg.elementAt(t, true); // ??? "true" ???
                 // var el = _d(seg, cursor.track); //
                 var el = seg.elementAt(cursor.track);
+				if ((el!==null) && (el.tuplet)) {
+					hasTuplet=true;
+					break;
+				}
                 if ((el != null) && (el.parent.tick === seg.tick)) {
                     if (el.type === Element.CHORD) {
                         var cnotes = el.notes;
@@ -1893,11 +1989,13 @@ MuseScore {
                 // seg = curstmp.next; // (-) déborde de la mesure, (+) ne prend que ce qu'on veut
                 seg = seg.nextInMeasure;
             }
+        endCmd(cursor.score, "select singlevoice range");
+
+        if (hasTuplet)
+            return -1;
+        else
+            return (res ? 1 : 0);
         }
-
-        endCmd(cursor.score, "select range");
-
-        return res;
 
     }
 
