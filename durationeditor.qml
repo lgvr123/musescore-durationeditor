@@ -368,7 +368,7 @@ MuseScore {
         }
     }
 
-    function setElementDot(element, dot) {
+    function setElementDot(element, dot, multivoice) {
 
         if (element.tuplet !== null) {
             warningDialog.text = "Cannot perform this action for elements within tuplets";
@@ -390,7 +390,7 @@ MuseScore {
             newDuration = analyze.base * dot;
         }
 
-        setElementDuration(element, newDuration);
+        setElementDuration(element, newDuration, multivoice);
     }
 
     /**
@@ -419,7 +419,7 @@ MuseScore {
 
         var current = durationTo64(element.duration);
         var increment = (insertmode) ? newDuration : newDuration - current;
-        logThis("setElementDuration: from " + current + " to " + newDuration);
+        logThis("setElementDuration: from " + current + " to " + newDuration + " in "+((typeof multivoice==="undefined")?"undefined":(multivoice?"multi":"single"))+" voice context");
 
         if (increment > 0) {
 
@@ -445,6 +445,7 @@ MuseScore {
                 }
                 break;
             case -1:
+				logThis("!! cannot perform a duration modification of a single voice context with tuplets after.");
                 warningDialog.subtitle = "Duration editor";
                 warningDialog.text = "The limit of the plugin have been reached.\nIt cannot perform a duration modification of a single voice context with tuplets after.";
                 warningDialog.open();
@@ -855,10 +856,11 @@ MuseScore {
 		            break;
 		        } else {
 		            // Il faut supprimer plus que le dernier
-		            setElementDuration(last, 0);
+		            setElementDuration(last, 0, selection.multivoice);
 		            delta = newDuration * (-1);
 		        }
 		    }
+			
 		    // endCmd(curScore, "adapt last note duration"); // DEBUG
 		    // 2) adding a tuplet
 		    var cur_time = track.first_tick;
@@ -901,7 +903,7 @@ MuseScore {
         var duration = 0;
         for (var i = 0; i < _p.length; i++) {
             var e = _p[i];
-            if ((e.type == Element.CHORD) || (e.type == Element.REST)) {
+            if ((e.type === Element.CHORD) || (e.type === Element.REST)) {
                 chords.push(e);
                 duration += durationTo64(e.duration);
             }
@@ -941,34 +943,88 @@ MuseScore {
         var rest = cursor.element;
 		debugCursor(cursor,"setting correct length of first element");
 		logThis("setting to "+duration);
-        setElementDuration(rest, duration);
+        setElementDuration(rest, duration, selection.multivoice);
 
         // 2) Re-add the selection
         pasteSelection(cursor, targets);
 
     }
 
+	/**
+	* Copy segment by segment, track by track, the CHORDREST found a this segment.
+	* Includes the annotations at this segment, as well as the notes and their properties
+	*/
     function copySelection(chords) {
-		logThis("Copying "+chords.length+" elements");
+        logThis("Copying " + chords.length + " elements");
         var targets = [];
+        loopelements:
         for (var i = 0; i < chords.length; i++) {
             var chord = chords[i];
-			if(chord.type===Element.NOTE) chord=chord.parent;
-            logThis("Copying " + i + ": " + chord.userName() + " - "+ (chord.duration?chord.duration.str:"null") + ", notes: " + (chord.notes ? chord.notes.length : 0));
+
+            if (chord.type === Element.NOTE) {
+                logThis("!! note element in the selection. Using its parent's chord instead");
+                chord = chord.parent;
+
+                for (var c = 0; c < targets.length; c++) {
+                    if ((targets[c].tick === chord.parent.tick) && (targets[c].track === chord.track))
+						logThis("dropping this note, because we have already added its parent's chord in the selection");
+                        continue loopelements;
+                }
+            }
+
+            logThis("Copying " + i + ": " + chord.userName() + " - " + (chord.duration ? chord.duration.str : "null") + ", notes: " + (chord.notes ? chord.notes.length : 0));
             var target = {
+				"_element": chord,
+				"tick": chord.parent.tick,
+				"track": chord.track,
                 "duration": (chord.duration?{
                     "numerator": chord.duration.numerator,
                     "denominator": chord.duration.denominator,
                 }:null),
                 "lyrics": chord.lyrics,
                 "graceNotes": chord.graceNotes,
+				"notes": undefined,
+				"annotations": [],
 				"_username": chord.userName(),
 				"userName": function() { return this._username;} //must be "chords[i]"
             };
+
             // If CHORD, then remember the notes. Otherwise treat as a rest
             if (chord.type === Element.CHORD) {
                 target.notes = chord.notes;
             };
+
+			// Searching for harmonies
+			var seg=chord;
+			while(seg && seg.type!==Element.SEGMENT) {
+				seg=seg.parent
+			}
+			
+			// 22/5: Tentative de gérer les HArmony
+			// 1) les copier (fait - ici)
+			// 2) les supprimer (à faire  - quand/où ????)
+			// 3) les recopier (à faire  - dans pasteSelection)
+			// alt à envisager: les sélectionner dès la sélection
+			
+			if(seg!==null) {
+				var annotations = seg.annotations;
+				//console.log(annotations.length + " annotations");
+				if (annotations && (annotations.length > 0)) {
+					var filtered=[];
+					// annotations=annotations.filter(function(e) {
+						// return (e.type === Element.HARMONY) && (e.track===chord.track);
+					// });
+					for(var h=0;h<annotations.length;h++) {
+						var e=annotations[h];
+						if (/*(e.type === Element.HARMONY) &&*/ (e.track===chord.track)) 
+							filtered.push(e);
+					}
+					annotations=filtered;
+					target.annotations=annotations;
+				} else annotations=[]; // DEBUG
+				logThis("--Annotations: " + annotations.length + ((annotations.length > 0) ? (" (\"" + annotations[0].text + "\")") : ""));
+			}
+			// Done
             targets.push(target);
             // logThis("--Lyrics: " + target.lyrics.length + ((target.lyrics.length > 0) ? (" (\"" + target.lyrics[0].text + "\")") : ""));
         }
@@ -982,10 +1038,13 @@ MuseScore {
 		logThis("Pasting "+targets.length+" elements at "+cursor.tick+"/"+cursor.track);
         for (var i = 0; i < targets.length; i++) {
             var target = targets[i];
-            //var target = chords[i]; // TEST - DIRECTEMENT UTILISER LES NOTES MEMEORISEES --> KO (du moins sur les durées)
+
+            //var target = targets[i]._element; // TEST - DIRECTEMENT UTILISER LES NOTES MEMEORISEES --> KO (du moins sur les durées)
             var tick = cursor.tick;
+			
             logThis("Pasting " + i + ": " + target.userName() + " - "+ target.duration.numerator + "/" + target.duration.denominator + ", notes: " + (target.notes ? target.notes.length : 0));
 
+			// element level
             if (target.notes && target.notes.length > 0) {
                 var pitches = [];
                 for (var j = 0; j < target.notes.length; j++) {
@@ -1011,20 +1070,39 @@ MuseScore {
             cursorToDuration(cursor, durationTo64(target.duration));
             var current = cursor.element;
             // debugO("Target", target,["lyrics","notes"],true);
-            logThis("- adding the lyrics: " + target.lyrics.length + ((target.lyrics.length > 0) ? (" (\"" + target.lyrics[0].text + "\")") : "") + " on " + current.userName());
-            if (typeof(target.lyrics) !== "undefined") {
-            startCmd(curScore, "adding the lyrics");
-                for (var j = 0; j < target.lyrics.length; j++) {
-                    var lorig = target.lyrics[j];
-                    logThis("-- adding a lyric: \"" + lorig.text + "\"");
-                    // current.add(lorig); // no error but the lyric is not to be seen
-                    var lnew = newElement(Element.LYRICS);
-                    lnew.text = lorig.text;
-                    current.add(lnew);
+            
+            if ((typeof(target.lyrics) !== "undefined") || (target.annotations.length > 0)) {
+                // lyrics
+                startCmd(curScore, "adding the texts");
+                logThis("- adding the lyrics: " + target.lyrics.length + " on " + current.userName());
+                if (typeof(target.lyrics) !== "undefined") {
+                    for (var j = 0; j < target.lyrics.length; j++) {
+                        var lorig = target.lyrics[j];
+                        logThis("-- adding a lyric: \"" + lorig.text + "\"");
+                        // current.add(lorig); // no error but the lyric is not to be seen
+                        var lnew = newElement(Element.LYRICS);
+                        lnew.text = lorig.text;
+                        current.add(lnew);
+                    }
                 }
-            endCmd(curScore, "adding the lyrics");
-            }
 
+                // annotations
+                logThis("- adding the annotations: " + target.annotations.length + " on " + current.userName());
+                if (target.annotations.length > 0) {
+                    for (var j = 0; j < target.annotations.length; j++) {
+                        var lorig = target.annotations[j];
+                        logThis("-- adding a " + lorig.userName() + ": \"" + lorig.text + "\"");
+                        // current.add(lorig); // no error but the lyric is not to be seen
+                        var lnew = newElement(lorig.type);
+                        lnew.text = lorig.text;
+                        cursor.add(lnew);
+						
+						// removing the former copied element
+						removeElement(lorig);
+                    }
+                }
+                endCmd(curScore, "adding the texts");
+            }
             cursor.rewindToTick(tick);
 			
 			// Moving to next segment, in the *same measure*. 
@@ -1883,18 +1961,23 @@ MuseScore {
         var element;
         var the_real_last = last;
 		logThis("- searching for last non rest segment");
+		var fTrack=multivoice?cursor.staffIdx*4:cursor.track;
+		var lTrack=multivoice?cursor.staffIdx*4+3:cursor.track;
 		// Je remonte depuis la fin. Tant que je trouve qqch et que ce qqch n'est pas un accord ou n'est pas dans un tuplet, alors je continue à remonter
         // while ((last != null) && (((element = _d(last, cursor.track)) == null) || ((element.type != Element.CHORD) && (element.tuplet === null)))) { // 1.3.0 un élement dans un tuplet, on arrête
+		loopingsegments:
         while (last!==null)  {
 			var track=cursor.track;
-			// TODO Gérer le multivoice
-			var element= _d(last, track);
+			for(var track=fTrack;track<=lTrack;track++) {
+				var element= _d(last, track);
 
-            if (element != null) {
-			debugSegment(last, track, "last segment's candidate:");
-				if ((element.type === Element.CHORD) || (element.tuplet)) 
+				if (element != null) {
+					debugSegment(last, track, "last segment's candidate:");
+					if ((element.type === Element.CHORD) || (element.tuplet)) 
+						break loopingsegments;
+					the_real_last = last;
 					break;
-                the_real_last = last;
+				}
 			}
             last = last.prevInMeasure;
         }
@@ -1960,6 +2043,7 @@ MuseScore {
 					hasTuplet=true;
 					break;
 				}
+				// element level
                 if ((el != null) && (el.parent.tick === seg.tick)) {
                     if (el.type === Element.CHORD) {
                         var cnotes = el.notes;
@@ -1984,6 +2068,24 @@ MuseScore {
                 } else {
                     logThis("no element found at this tick " + ((el != null) ? ("(" + el.parent.tick + ")") : ""));
                 }
+
+				/*// 22/5: Tentative de gérer les HArmony
+				// alt : faire ça dans copySelection
+				// segment level
+				
+					var annotations = seg.annotations;
+				//console.log(annotations.length + " annotations");
+				if (annotations && (annotations.length > 0)) {
+					for(var h=0;h<annotations.length;h++) {
+						var e=annotations[h];
+						if (e.track===chord.track) {
+                            cursor.score.selection.select(e, true);
+                            logThis("adding " + e.userName() + " (" + el.parent.tick + ") to selection");
+						}
+					}
+					annotations=filtered;
+					targets.harmonies=annotations;
+				}*/
 
                 // seg = seg.next;
                 // seg = curstmp.next; // (-) déborde de la mesure, (+) ne prend que ce qu'on veut
