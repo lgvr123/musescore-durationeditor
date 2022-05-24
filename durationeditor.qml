@@ -26,8 +26,10 @@ import "durationeditor"
 /* 	- 1.3.0.beta2: Correction for the 5:4 case
 /* 	- 1.3.0.beta2: Forbid setDuration and setDot within tuplets
 /* 	- 1.3.0.beta2: log to file
-/* 	- 1.3.0.beta2: Single Voice edition (ongoing - paste doesn't work)
+/* 	- 1.3.0.beta2: Single Voice edition
 /* 	- 1.3.0.beta2: Tuplet multivoice edition (ongoing)
+/* 	- 1.3.0.beta2: Single voice copy/paste (incl. tuplets) copies all the annotations (incl. harmonies)
+
 /**********************************************/
 
 MuseScore {
@@ -589,6 +591,8 @@ MuseScore {
 
         var res = getSelection();
         var rests = res.chords;
+		
+		
         if (rests.length == 0) {
             logThis("NO SELECTION. QUIT HERE.");
             return;
@@ -603,50 +607,94 @@ MuseScore {
 
         cursor.rewindToTick(cur_time);
 
+		// current is rest
         if (rest.type === Element.REST) {
 
             logThis("REST ==> looking behind for a CHORD");
+            logThis("REST ==> looking backward for a CHORD");
+            cursor.rewindToTick(cur_time);
+            if (movePrev(cursor)) {
+                logThis("got a backward element");
+                var candidate = cursor.element;
 
-            if (!movePrev(cursor)) {
-                warningDialog.text = "Failed to tie the rest.\nCannot identify a note to tie from.";
-                warningDialog.open();
-                return;
+                if (candidate !== null) {
+                    logThis("which ain't null");
+
+                    if (candidate.type === Element.CHORD) {
+                        logThis("and is a chord ==> ok");
+                        source = candidate;
+                    } else {
+                        logThis("which ain't a chord (" + candidate.userName() + ")");
+                    }
+                } else {
+                    logThis("which is null");
+                }
+            } else {
+                logThis("no backward element found");
             }
 
-            source = cursor.element;
+            if (source == null) {
+                logThis("REST ==> looking forward for a CHORD");
+                cursor.rewindToTick(cur_time);
+                if (moveNext(cursor)) {
+                    logThis("got a next element");
+                    var candidate = cursor.element;
 
+                    if (candidate !== null) {
+                        logThis("which ain't null");
+
+                        if (candidate.type === Element.CHORD) {
+                            logThis("and is a chord ==> ok");
+                            source = candidate;
+                        } else {
+                            logThis("which ain't a chord (" + candidate.userName() + ")");
+                        }
+                    } else {
+                        logThis("which is null");
+                    }
+                } else {
+                    logThis("no next element found");
+                }
+            }
             if (source === null) {
-                warningDialog.text = "Failed to tie the rest.\nCannot identify a note to tie from.";
-                warningDialog.open();
-                return;
-            }
-
-            if (source.type !== Element.CHORD) {
-                warningDialog.text = "Failed to tie the rest.\nThe selected rest must to preceded by a note.";
+                warningDialog.text = "Failed to tie the rest.\nThe selected note must be preceeded or followed by a chord.";
                 warningDialog.open();
                 return;
             }
         } // current is rest
+
+		// current is chord
         else {
-            logThis("CHORD ==> looking forward for a REST");
             source = rest;
             rest = null;
-            if (moveNext(cursor)) {
+
+            logThis("CHORD ==> looking backward for a REST");
+            cursor.rewindToTick(cur_time);
+            if (movePrev(cursor)) {
+                logThis("got a backward element");
                 var candidate = cursor.element;
 
                 if (candidate !== null) {
+                    logThis("which ain't null");
 
                     if (candidate.type === Element.REST) {
+                        logThis("and is a rest ==> ok");
                         rest = candidate;
+                    } else {
+                        logThis("which ain't a rest (" + candidate.userName() + ")");
                     }
+                } else {
+                    logThis("which is null");
                 }
+            } else {
+                logThis("no backward element found");
             }
 
             if (rest == null) {
-                logThis("CHORD ==> looking backward for a REST");
-                cursor.rewindToTick(cur_time);
-                if (movePrev(cursor)) {
-                    logThis("got a backward element");
+                logThis("CHORD ==> looking forward for a REST");
+				cursor.rewindToTick(cur_time);
+                if (moveNext(cursor)) {
+                    logThis("got a next element");
                     var candidate = cursor.element;
 
                     if (candidate !== null) {
@@ -662,17 +710,16 @@ MuseScore {
                         logThis("which is null");
                     }
                 } else {
-                    logThis("no backward element found");
+                    logThis("no next element found");
                 }
             }
-
             if (rest === null) {
                 warningDialog.text = "Failed to tie the note.\nThe selected note must be preceeded or followed by a rest.";
                 warningDialog.open();
                 return;
             }
 
-        }
+        } // current is chord
 
         // A source is found.
         // var note = source.notes[0];
@@ -720,8 +767,8 @@ MuseScore {
         }
 
         var selection = getTupletsFromSelection();
-
-        if (selection && (selection.elements.length > 0)) {
+		
+        if (selection && (selection.tracks.length > 0)) {
             // Tuplets selected - Converting to regular chords
             logThis("TUPLETS FOUND FROM SELECTION");
             if (ask) {
@@ -733,7 +780,7 @@ MuseScore {
 
             convertChordsFromTuplets(selection);
 
-        } else if (selection && (selection.elements.length === 0)) {
+        } else if (selection && (selection.tracks.length === 0)) {
             logThis("No TUPLETS FOUND FROM SELECTION");
             selection = getTupletsCandidates();
 			
@@ -764,6 +811,12 @@ MuseScore {
         }
 
     }
+
+	/**
+	* Determines how to convert the selection to tuplets.
+	* Computes the target duration, target tuplet ratio, .... Possibly ask for it it cannot be automatically determined.
+	* @see getTupletsCandidates for the `selection` object structure.
+	*/
     function convertChordsToTuplets(selection, ask) {
         // Transforming regular notes into tuplets
 		var track1=selection.tracks[0];
@@ -827,6 +880,11 @@ MuseScore {
         }
     }
 
+	/**
+	* Executing the conversion of the selection to tuplets.
+	* Everything must be known (target duration, target tuplet ratio, ...).
+	* @see getTupletsCandidates for the `selection` object structure.
+	*/
     function convertChordsToTuplets_Exectute(selection, duration, measureType, tupletN, tupletD) {
         if (tupletN == null || tupletD == null) {
             warningDialog.subtitle = "Tuplet conversion";
@@ -835,32 +893,44 @@ MuseScore {
             return;
         }
 		
+		var targets=[];
+		// Storing track by track what will be pasted later
+		// Rational: Dealing with the track 0's duration may alter what's on track 1 and therefor the copy we would take if we did by the time we handle the track 1.
+		// So we copy everything *before* modifying anything.
+		for (var t = 0; t < selection.tracks.length; t++) {
+		    var track = selection.tracks[t];
+			logThis("** Copying tuplet "+t+" (track "+track.track+")");
+
+		    targets[t] = copySelection(track.chords);
+		}		
+		
 		// Working track by track
 		for (var t = 0; t < selection.tracks.length; t++) {
 		    var track = selection.tracks[t];
+			logThis("** Dealing with tuplet "+t+" (track "+track.track+")");
 
 		    // Inserting the triplet
-		    // 0) collecting what to be re-added
-		    var targets = copySelection(track.chords);
 
 		    // 1) deleting/reducing the last elements duration until we get the right total dur
 		    var targetdur = duration * tupletD / tupletN;
-		    logThis("Adapting the duration of the selection from " + duration + " to " + targetdur);
-		    var delta = duration - targetdur;
-		    // startCmd(curScore, "adapt last note duration");
-		    for (var i = track.chords.length - 1; i >= 0; i--) {
-		        var last = track.chords[i];
-		        var newDuration = durationTo64(last.duration) - delta;
-		        if (newDuration >= 0) {
-		            setElementDuration(last, newDuration, selection.multivoice);
-		            break;
-		        } else {
-		            // Il faut supprimer plus que le dernier
-		            setElementDuration(last, 0, selection.multivoice);
-		            delta = newDuration * (-1);
-		        }
-		    }
-			
+			if (t === 0 || !selection.multivoice) {
+			    // must only be done one time if in multivoice context
+			    logThis("Adapting the duration of the selection from " + duration + " to " + targetdur);
+			    var delta = duration - targetdur;
+			    // startCmd(curScore, "adapt last note duration");
+			    for (var i = track.chords.length - 1; i >= 0; i--) {
+			        var last = track.chords[i];
+			        var newDuration = durationTo64(last.duration) - delta;
+			        if (newDuration >= 0) {
+			            setElementDuration(last, newDuration, selection.multivoice);
+			            break;
+			        } else {
+			            // Il faut supprimer plus que le dernier
+			            setElementDuration(last, 0, selection.multivoice);
+			            delta = newDuration * (-1);
+			        }
+			    }
+			}
 		    // endCmd(curScore, "adapt last note duration"); // DEBUG
 		    // 2) adding a tuplet
 		    var cur_time = track.first_tick;
@@ -878,7 +948,10 @@ MuseScore {
 		    endCmd(curScore, "addTuplet");
 
 		    // 3) re-adding the notes
-		    pasteSelection(cursor, targets);
+		    pasteSelection(cursor, targets[t]);
+			
+			logThis("** Done with tuplet "+t+" (track "+track.track+")");
+
 		}
 
 		// if (!debug)endCmd(curScore);
@@ -890,63 +963,79 @@ MuseScore {
         return ((res | 0) == res); // trunc
     }
 
-	// TODO use the selection.multivoice parameter
+	/**
+	* Executing the conversion of the selected tuplets to regular chords.
+	* @see getTupletsFromSelection for the `selection` object structure.
+	*/
     function convertChordsFromTuplets(selection) {
         // Transforming a tuplet into regular notes
 
-        var tuplet = selection.elements[0].tuplet;
-        var measure = tuplet.parent;
-        var _p = tuplet.elements;
+		var targets=[];
+		// Storing track by track what will be pasted later
+		// Rational: Dealing with the track 0's duration may alter what's on track 1 and therefor the copy we would take if we did by the time we handle the track 1.
+		// So we copy everything *before* modifying anything.
+		for (var t = 0; t < selection.tracks.length; t++) {
+		    var track = selection.tracks[t];
+			logThis("** Copying tuplet "+t+" (track "+track.track+")");
+
+		    targets[t] = copySelection(track.chords);
+		}		
+
+		// computing the new duration
+        var tuplet = selection.tracks[0].chords[0].tuplet;
         var tuplet_ratio = tuplet.actualNotes / tuplet.normalNotes;
-        var chords = [];
-        // Rem: duration is my target duration
-        var duration = 0;
-        for (var i = 0; i < _p.length; i++) {
-            var e = _p[i];
-            if ((e.type === Element.CHORD) || (e.type === Element.REST)) {
-                chords.push(e);
-                duration += durationTo64(e.duration);
-            }
-        };
+        var duration = selection.tracks[0].duration;
         var origduration = duration / tuplet_ratio;
 
         // for (var i = 0; i < chords.length; i++) {
         // logThis("Tuplets chords: " + chords[i].userName() + " with duration " + durationTo64(chords[i].duration));
         // }
 
-        // 0) Memorizing what to re-add
-        var targets = copySelection(chords);
+		// Working track by track
+		var cursor = curScore.newCursor();
+		// 1) Remove the tuplet
+		for (var t = 0; t < selection.tracks.length; t++) {
+		    var track = selection.tracks[t];
+			var tuplet = track.chords[0].tuplet;
+		    logThis("** Removing the tuplet " + t + " (track " + track.track + ")");
 
-        // 1) Remove the tuplet
-        var cur_time = chords[0].parent.tick;
-        var cursor = curScore.newCursor();
-		var track= chords[0].track;
-        cursor.rewindToTick(cur_time);
-        cursor.track = track;
-		
-		debugCursor(cursor,"removing tuplet");
+		    var cur_time = track.first_tick;
+		    cursor.track = track.track;
+		    cursor.rewindToTick(cur_time);
 
+		    debugCursor(cursor, "removing tuplet");
 
-        startCmd(curScore, "removeTuplet");
-        removeElement(tuplet);
-        // 1.3.0 dans certains cas le removeElement ne donne pas lieu à 1 silence masi pls, dont la somme à la bonne durée,
-        // il faut le refusionner ensemble
-        cursor.rewindToTick(cur_time);
-        cursor.track = track;
-		debugCursor(cursor,"merging resulting rests if necessary");
-		logThis("merging to "+origduration);
-		cursorToDuration(cursor, origduration);
-        endCmd(curScore, "removeTuplet");
+		    startCmd(curScore, "removeTuplet");
+		    removeElement(tuplet);
+		    // 1.3.0 dans certains cas le removeElement ne donne pas lieu à *1* silence mais à *plusieurs*, dont la *somme* a la bonne durée,
+		    // il faut le refusionner ensemble
+		    cursor.track = track.track;
+		    cursor.rewindToTick(cur_time);
+		    debugCursor(cursor, "merging resulting rests if necessary");
+		    logThis("merging to " + origduration);
+		    cursorToDuration(cursor, origduration);
+		    endCmd(curScore, "removeTuplet");
+		}
+        
+		// 2) Re-add the selection
+		for (var t = 0; t < selection.tracks.length; t++) {
+		    var track = selection.tracks[t];
+		    logThis("** Dealing the tuplet " + t + " (track " + track.track + ")");
+		    var cur_time = track.first_tick;
+		    cursor.track = track.track;
+		    cursor.rewindToTick(cur_time);
+			
+					    if (t === 0 || !selection.multivoice) {
+		        // must only be done one time if in multivoice context
+		        var rest = cursor.element;
+		        debugCursor(cursor, "setting correct length of first element");
+		        logThis("setting to " + duration);
+		        setElementDuration(rest, duration, selection.multivoice);
+		    }
 
-        cursor.rewindToTick(cur_time);
-        cursor.track = track;
-        var rest = cursor.element;
-		debugCursor(cursor,"setting correct length of first element");
-		logThis("setting to "+duration);
-        setElementDuration(rest, duration, selection.multivoice);
-
-        // 2) Re-add the selection
-        pasteSelection(cursor, targets);
+			
+			pasteSelection(cursor, targets[t]);
+		}
 
     }
 
@@ -955,7 +1044,7 @@ MuseScore {
 	* Includes the annotations at this segment, as well as the notes and their properties
 	*/
     function copySelection(chords) {
-        logThis("Copying " + chords.length + " elements");
+        logThis("Copying " + chords.length + " elements canidates");
         var targets = [];
         loopelements:
         for (var i = 0; i < chords.length; i++) {
@@ -966,9 +1055,10 @@ MuseScore {
                 chord = chord.parent;
 
                 for (var c = 0; c < targets.length; c++) {
-                    if ((targets[c].tick === chord.parent.tick) && (targets[c].track === chord.track))
+                    if ((targets[c].tick === chord.parent.tick) && (targets[c].track === chord.track)) {
 						logThis("dropping this note, because we have already added its parent's chord in the selection");
                         continue loopelements;
+					}
                 }
             }
 
@@ -994,17 +1084,11 @@ MuseScore {
                 target.notes = chord.notes;
             };
 
-			// Searching for harmonies
+			// Searching for harmonies & other annotations
 			var seg=chord;
 			while(seg && seg.type!==Element.SEGMENT) {
 				seg=seg.parent
 			}
-			
-			// 22/5: Tentative de gérer les HArmony
-			// 1) les copier (fait - ici)
-			// 2) les supprimer (à faire  - quand/où ????)
-			// 3) les recopier (à faire  - dans pasteSelection)
-			// alt à envisager: les sélectionner dès la sélection
 			
 			if(seg!==null) {
 				var annotations = seg.annotations;
@@ -1029,12 +1113,14 @@ MuseScore {
             // logThis("--Lyrics: " + target.lyrics.length + ((target.lyrics.length > 0) ? (" (\"" + target.lyrics[0].text + "\")") : ""));
         }
 
+        logThis("Ending was a copy of " + targets.length + " elements");
+
         return targets;
 
     }
 
     function pasteSelection(cursor, targets) {
-        startCmd(curScore, "pasteSelection");
+        // startCmd(curScore, "pasteSelection"); // Non, on a déjà un startCmd dans restToChord
 		logThis("Pasting "+targets.length+" elements at "+cursor.tick+"/"+cursor.track);
         for (var i = 0; i < targets.length; i++) {
             var target = targets[i];
@@ -1065,17 +1151,18 @@ MuseScore {
 			logThis("- adapting duration");
             // startCmd(curScore, "adapt duration"); //DEBUG
             cursor.rewindToTick(tick);
-			// w/a setting to a duration < what we need to force a change
+			// w/a setting to a duration < what we need, in order to be sure the duration will change 
+			// (e.g. changing from 1/4 to 1/4 when the rest is not visible) won't make it appear. We need to do 1/4 -> (something else) -> 1/4
             cursorToDuration(cursor, durationTo64(target.duration)/2);
             cursorToDuration(cursor, durationTo64(target.duration));
-            var current = cursor.element;
-            // debugO("Target", target,["lyrics","notes"],true);
             
-            if ((typeof(target.lyrics) !== "undefined") || (target.annotations.length > 0)) {
+            if ((target.lyrics && target.lyrics.length > 0) || (target.annotations && target.annotations.length > 0)) {
+				var current = cursor.element;
+				// debugO("Target", target,["lyrics","notes"],true);
                 // lyrics
                 startCmd(curScore, "adding the texts");
                 logThis("- adding the lyrics: " + target.lyrics.length + " on " + current.userName());
-                if (typeof(target.lyrics) !== "undefined") {
+                if (target.lyrics) {
                     for (var j = 0; j < target.lyrics.length; j++) {
                         var lorig = target.lyrics[j];
                         logThis("-- adding a lyric: \"" + lorig.text + "\"");
@@ -1088,7 +1175,7 @@ MuseScore {
 
                 // annotations
                 logThis("- adding the annotations: " + target.annotations.length + " on " + current.userName());
-                if (target.annotations.length > 0) {
+                if (target.annotations) {
                     for (var j = 0; j < target.annotations.length; j++) {
                         var lorig = target.annotations[j];
                         logThis("-- adding a " + lorig.userName() + ": \"" + lorig.text + "\"");
@@ -1105,24 +1192,29 @@ MuseScore {
             }
             cursor.rewindToTick(tick);
 			
-			// Moving to next segment, in the *same measure*. 
+			// Moving to next segment 
 			moveNext(cursor); 
-			// // We assume the measure has been prepared to accept what we need to paste.
-            // if (!moveNextInMeasure(cursor)) {
-				// if (i<(targets.length-1)) 
-				// logThis("End of measure reached, not pasting the remaining elements");
-				// break;
-			// }
         }
-		endCmd(curScore, "pasteSelection");
+		//endCmd(curScore, "pasteSelection");
 
     }
 
     /**
-     * Returns the Chord/Rests belonging to the 1st tuplet of the selection.
+     * Returns the Chord/Rests belonging to tuplets of the selection.
      * If the selection does not contain a tuplet, an empty array is returned.
      * If the selection is containing incoherent elements (tuplet-based and non-tuplet-based elements, multiple tuplets elements, ...), "false" is returned.
-     */
+
+	* @return false | the tuplets' elements organised by tracks
+	* 	{
+	*	multivoice: true|false,  
+	* 	tracks: array of 
+	*		{
+	*       	track: track number,
+    *           duration: total duration of the selection (rem: on all the tracks the selection must have the same duration)
+    *           chords: array of Element.CHORD | Element.REST that belonging to the tuplet,
+	*		}
+	*	}
+	*/
     function getTupletsFromSelection() {
         if (curScore == null)
             return false;
@@ -1140,7 +1232,8 @@ MuseScore {
             }
         }
 
-        if (tuplets.length != 0) {
+// 24/5/22 on n'utilise jamais cette fonctionnalité. Celle par notes suffit
+/*        if (tuplets.length != 0) {
             logThis("A tuplet bar is selected. Returning its elements");
             var parts = [];
             var tuplet = tuplets[0];
@@ -1153,9 +1246,10 @@ MuseScore {
 			var multivoice=(curScore.selection)?curScore.selection.isRange:false;
 			if(!multivoice) multivoice=sameAsRange(parts);
 			logThis((multivoice?"Multi voice":"Single voice")+" edition"); 
+			// TODO aligner avec la nouvelle strcuture
             return {multivoice: multivoice, elements: parts};
         }
-
+*/
         var selection = SelHelper.getChordsRestsFromSelection();
         if (selection.length == 0) {
             // empty selection
@@ -1170,7 +1264,7 @@ MuseScore {
         if (tupletChords.length == 0) {
             // a selection but no tuplets
             logThis("No tuplets in selection");
-            return {multivoice: true, elements: []};
+            return {multivoice: true, tracks: []};
         }
 
         if (tupletChords.length != selection.length) {
@@ -1179,64 +1273,136 @@ MuseScore {
             return false;
         }
         logThis("All selection have tuplets");
-
-        // checking if we are dealing with 1 tuplet
-        var tuplet = tupletChords[0].tuplet;
-        var _p = tupletChords[0].tuplet.elements;
-        var parts = [];
-        for (var i = 0; i < _p.length; i++) {
-            var e = _p[i];
-            if ((e.type == Element.CHORD) || (e.type == Element.REST)) {
-                parts.push(e);
-            }
-        };
-        logThis(selection.length + " elements; " + parts.length + " parts");
-        // looking if all the elements **of the first tuplet** can be found in the selection
-        var remainingp = parts.filter(function (e) {
-            logThis("filtering parts: " + e.parent.tick);
-            var found = false;
-            for (var j = 0; j < selection.length; j++) {
-                // logThis("filtering parts: " + e.parent.tick + "/" + selection[j].parent.tick);
-                if (selection[j].parent.tick == e.parent.tick) {
-                    found = true;
-                    break;
+		
+		// Now that now that the selection is roughly correct, we organise this by track
+		// grouping stuff by tracks
+        var tracks = {};
+        for (var i = 0; i < tupletChords.length; i++) {
+            var e = tupletChords[i];
+            var t = e.track;
+            if (tracks[t] === undefined)
+                tracks[t] = {
+                    track: t,
+                    chords: [],
                 }
-            }
-            return !found;
-        });
-
-        // looking if all the elements **of the selection** are part of the first tuplet
-        var remainingc = selection.filter(function (e) {
-            var found = false;
-            for (var j = 0; j < parts.length; j++) {
-                // logThis("filtering selection: " + e.parent.tick + "/" + parts[j].parent.tick);
-                if (parts[j].parent.tick == e.parent.tick) {
-                    found = true;
-                    break;
-                }
-            }
-            return !found;
-        });
-        logThis("Have we found enverything ? Remaining parts:" + remainingp.length + " parts, Remaining selection:" + remainingc.length + " chords");
-
-        // 16/3/22: no testing this one any more. All I care is that my selection belongs to 1 and only 1 tuplet.
-        // if ((remainingp.length != 0) || (remainingc.length != 0)) {
-        if ((remainingc.length != 0)) {
-            // all chords/rests are not part of the same tuplet ==> ERROR
-            logThis("The selection belongs to different tuplets.");
-            return false;
+            tracks[t].chords.push(e);
         }
+		
+        logThis("Candidate tuplet selection on tracks: " + Object.keys(tracks));
+
+		// .. flatten this into an array
+		tracks = Object.keys(tracks).map(function (e) {
+		    return tracks[e];
+		});
+
+        // verifying the coherence of all the tracks
+		
+        for (var it = 0; it < tracks.length; it++) {
+            var track = tracks[it];
+		
+			logThis("** analyzing the tuplet candidates on track "+track.track);
 
 
-        logThis("Returning implicy selected tuplet chords elements");
+			// checking if we are dealing with 1 tuplet
+			var tuplet = track.chords[0].tuplet;
+			var _p = tuplet.elements;
+			var parts = [];
+			for (var i = 0; i < _p.length; i++) {
+				var e = _p[i];
+				if ((e.type == Element.CHORD) || (e.type == Element.REST)) {
+					parts.push(e);
+				}
+			};
+			logThis(selection.length + " elements; " + parts.length + " parts");
+			// looking if all the elements **of the first tuplet** can be found in the selection
+			var remainingp = parts.filter(function (e) {
+				logThis("filtering parts: " + e.parent.tick);
+				var found = false;
+				for (var j = 0; j < selection.length; j++) {
+					// logThis("filtering parts: " + e.parent.tick + "/" + selection[j].parent.tick);
+					if (selection[j].parent.tick == e.parent.tick) {
+						found = true;
+						break;
+					}
+				}
+				return !found;
+			});
+
+			// looking if all the elements **of the selection** are part of the first tuplet
+			var remainingc = selection.filter(function (e) {
+				var found = false;
+				if (e.track!==track) return false; // we analyze only what's on the current track
+				for (var j = 0; j < parts.length; j++) {
+					// logThis("filtering selection: " + e.parent.tick + "/" + parts[j].parent.tick);
+					if (parts[j].parent.tick === e.parent.tick) {
+						found = true;
+						break;
+					}
+				}
+				return !found;
+			});
+			logThis("Have we found enverything ? Remaining parts: " + remainingp.length + " parts, Remaining selection:" + remainingc.length + " chords");
+
+			// 16/3/22: no testing this one any more. All I care is that my selection belongs to 1 and only 1 tuplet.
+			// if ((remainingp.length != 0) || (remainingc.length != 0)) {
+			if ((remainingc.length != 0)) {
+				// all chords/rests are not part of the same tuplet ==> ERROR
+				logThis("--> No. The selection on track "+track.track+" belongs to different tuplets.");
+				return false;
+			} else {
+				logThis("--> Yes. The selection on track "+track.track+" belongs to one unique tuplet.");
+			}
+			
+			track.chords=undefined; // clearing this property
+			track.chords=parts;
+			
+			// ensuring all tuplets candidates are starting at the same tick
+            track.first_tick = track.chords[0].parent.tick;
+
+            if (it > 0 && tracks[it - 1].first_tick !== track.first_tick) {
+                logThis("Multi track selection does not start at the same tick");
+                return false;
+            }
+			
+            // computing duration and ensuring an equal duration
+            track.duration = 0;
+            for (var i = 0; i < track.chords.length; i++) {
+                var dur = durationTo64(track.chords[i].duration);
+                track.duration += dur;
+                logThis("From tuplets elements: " + track.chords[i].userName() + " with duration " + dur);
+            }
+
+            if (it > 0 && tracks[it - 1].duration !== track.duration) {
+                logThis("Multi track selection does not have the same duration");
+                return false;
+            }
+
+			
+
+		}
+		
 		var multivoice=(curScore.selection)?curScore.selection.isRange:false;
 		if(!multivoice) multivoice=sameAsRange(parts);
 		logThis((multivoice?"Multi voice":"Single voice")+" edition"); 
-		return {multivoice: multivoice, elements: parts};
+		return {multivoice: multivoice, tracks: tracks};
 
     } // getTupletsFromSelection
 
 
+	/**
+	* Analyse the selection for candidates for a to-tuplet conversion.
+	* @return false | the candidate elements organised by involved track, and some metadata:
+	* 	{
+	*	multivoice: true|false,  
+	* 	tracks: array of 
+	*		{
+	*       	track: track number
+    *           duration: total duration of the selection (rem: on all the tracks the selection must have the same duration)
+	*			samedur: true|false if all the chord elements have the same duration
+    *           chords: array of Element.CHORD | Element.REST,
+	*		}
+	*	}
+	*/
     function getTupletsCandidates() {
         // we have to ensure that we have a continuous selection
         var selection = SelHelper.getChordsRestsFromSelection();
@@ -1264,16 +1430,20 @@ MuseScore {
             tracks[t].chords.push(e);
         }
 		
+        logThis("Candidate tuplet selection on tracks: " + Object.keys(tracks));
+		
 		// .. flatten this into an array
 		tracks = Object.keys(tracks).map(function (e) {
 		    return tracks[e];
 		});
 
         // verifying the coherence of all the tracks
-        logThis("Candidate tuplet selection on tracks: " + Object.keys(tracks));
 
         for (var it = 0; it < tracks.length; it++) {
             var track = tracks[it];
+			
+			logThis("** analyzing the tuplet candidates on track "+track.track);
+
             // sorting by ascending tick
             track.chords = track.chords.sort(function (a, b) {
                 return a.parent.tick - b.parent.tick;
@@ -1390,6 +1560,10 @@ MuseScore {
 	    if (selection.length === 0)
 	        return -1;
 
+		logThis("Verifying the selection coherences:");
+
+		logThis("- #elements : "+selection.length); 
+
 	    // ticks
 	    if (!what || (what === "tick") || (what.indexOf("tick") > -1)) {
 
@@ -1398,6 +1572,9 @@ MuseScore {
 	        }).sort(function (a, b) {
 	            return a - b;
 	        });
+			
+			logThis("- ticks: "+tmp);
+			
 	        if (tmp[0] !== tmp[selection.length - 1]) {
 	            warningDialog.subtitle = "Duration editor";
 	            warningDialog.text = "Invalid selection. The selection cannot span over multiple ticks.";
@@ -1413,8 +1590,10 @@ MuseScore {
 	        }).sort(function (a, b) {
 	            return a - b;
 	        });
-	        console.log(tmp);
-	        if (tmp[0] !== tmp[selection.length - 1]) {
+			
+			logThis("- staves: "+tmp);
+	        
+			if (tmp[0] !== tmp[selection.length - 1]) {
 	            warningDialog.subtitle = "Duration editor";
 	            warningDialog.text = "Invalid selection. The selection cannot span over multiple staves.";
 	            warningDialog.open();
@@ -1428,7 +1607,9 @@ MuseScore {
 	        }).sort(function (a, b) {
 	            return a - b;
 	        });
-	        console.log(tmp);
+
+			logThis("- durations: "+tmp);
+
 	        if (tmp[0] !== tmp[selection.length - 1]) {
 	            warningDialog.subtitle = "Duration editor";
 	            warningDialog.text = "Invalid selection. The selection's elements must have the same duration.";
@@ -1443,6 +1624,80 @@ MuseScore {
 	* Tells whether a selection which is not of type Range (selection.isRange) can behave like a range (i.e. every elements of all the voices are selected-
 	*/ 
 	function sameAsRange(selection) {
+		logThis("Assessing if non-Range selection is similar to a range selection");
+		var fMeasure, lMeasure;
+		var selectedTracks=[];
+		var usedTracks=[];
+
+        for (var i = 0; i < selection.length; i++) {
+            var element = selection[i];
+
+            var seg = element;
+            while (seg && seg.type !== Element.SEGMENT) {
+                seg = seg.parent;
+            }
+
+            if (seg !== null) {
+                var tick = seg.tick;
+                var measure=seg.parent;
+				element.tick = tick; // enrich the element with its tick
+                
+				if (!fMeasure || measure.firstSegment.tick<fMeasure.firstSegment.tick)
+					fMeasure=measure;
+                
+				if (!lMeasure || measure.firstSegment.tick>lMeasure.firstSegment.tick)
+					lMeasure=measure;
+				
+				if(selectedTracks.indexOf(element.track)<0)
+					selectedTracks.push(element.track);
+                
+            }
+        }
+
+		selectedTracks=selectedTracks.sort(function(a,b) { return a-b;});
+
+        logThis("Selection from measure " + fMeasure.firstSegment.tick  + " to " + lMeasure.firstSegment.tick + " on tracks " + selectedTracks);
+
+		if(!fMeasure.is(lMeasure)) {
+			logThis("!!Multiuple measure selection. Should not happen in function `sameAsRange`");
+			return false;
+		}
+
+		// converting the tracks detected in the selection to the tracks of the staves involved. E.g. selection is on track 1 => tracks from the staff are from 0 to 3.
+        var fTrack = selectedTracks[0]/4;
+		fTrack=(fTrack | 0) * 4; // trunc
+        var lTrack = selectedTracks[0]/4;
+		lTrack=(lTrack | 0) * 4 + 3; // trunc
+
+        logThis("Comparing from tracks " + fTrack + " to " + lTrack);
+
+		// detecting which tracks are used in the current staff
+		// by detecting what is are the tracks having an element at the begining of the measure
+		var segment=fMeasure.firstSegment;
+		loopingsegments:
+		while(segment && segment.tick===fMeasure.firstSegment.tick) {
+		for (var t = fTrack; t <= lTrack; t++) {
+		    var el = _d(segment, t);
+		    if ((el !== null) && (usedTracks.indexOf(t) < 0))
+		        usedTracks.push(t);
+		};
+		segment = segment.nextInMeasure; // moving away from bars, timesig, clef, ... which are only on the voice 0
+		}
+		logThis("The measure's first segment has elements on tracks "+usedTracks); 
+
+
+		// comparing the selectedTracks and the usedTracks
+		var foundall=(usedTracks.filter(function(e) {
+			return selectedTracks.indexOf(e)<0;
+		}).length===0);
+	
+        
+        if (foundall) logThis("SIMILAR TO RANGE"); else logThis("NOT SIMILAR TO RANGE");
+		return foundall;
+		
+		
+	}
+/*	function sameAsRange(selection) {
 		logThis("Assessing if non-Range selection is similar to a range selection");
         var fTick, lTick;
         var fTrack, lTrack;
@@ -1476,6 +1731,7 @@ MuseScore {
 
         console.log("Selection from " + fTick + "/" + fTrack + " to " + lTick + "/" + lTrack);
 
+		// converting the tracks detected in the selection to the tracks of the staves involved. E.g. selection is on track 1 => tracks from the staff are from 0 to 3.
         fTrack = fTrack/4;
 		fTrack=(fTrack | 0) * 4; // trunc
         lTrack = lTrack/4;
@@ -1487,6 +1743,7 @@ MuseScore {
         cursor.rewindToTick(fTick);
         var segment = cursor.segment;
         var foundall = true;
+		// TODO buggy : ne détecte pas les cas en quiconce
         while (foundall && segment && segment.tick <= lTick) {
             for (var t = fTrack; t <= lTrack && foundall; t++) {
                 var element = segment.elementAt(t);
@@ -1523,7 +1780,7 @@ MuseScore {
 		
 		
 	}
-
+*/
     function cursorToDuration(cursor, target) {
 
         var analyze = analyzeDuration(target);
@@ -1666,8 +1923,8 @@ MuseScore {
             var target = orig + increment;
             var tick = last.parent.tick;
 			var tcursor=cursor.score.newCursor();
-            tcursor.rewindToTick(tick);
 			tcursor.track=t;
+            tcursor.rewindToTick(tick);
             cursorToDuration(tcursor, target);
         }
 		
@@ -1952,9 +2209,17 @@ MuseScore {
         //var first = cursor.segment.nextInMeasure;
         var first = (include === undefined || !include) ? cursor.segment.nextInMeasure : cursor.segment;
         // for the first segment: we go the next *existing* element after the one at the cursor.
-        while (first.elementAt(cursor.track) === null) {
+        while (first && first.elementAt(cursor.track) === null) {
             first = first.nextInMeasure;
         }
+		
+		if(!first) {
+            logThis("We are at the very of the measure/ Nothing to be selected.");
+            startCmd(cursor.score, "clear selection");
+            cursor.score.selection.clear();
+            endCmd(cursor.score, "clear selection");
+            return false;
+		}
 
         // For the last segment, we go the last of the measure which isn't a rest.
         var last = measure.lastSegment;
@@ -1967,11 +2232,10 @@ MuseScore {
         // while ((last != null) && (((element = _d(last, cursor.track)) == null) || ((element.type != Element.CHORD) && (element.tuplet === null)))) { // 1.3.0 un élement dans un tuplet, on arrête
 		loopingsegments:
         while (last!==null)  {
-			var track=cursor.track;
 			for(var track=fTrack;track<=lTrack;track++) {
 				var element= _d(last, track);
 
-				if (element != null) {
+				if (element !== null) {
 					debugSegment(last, track, "last segment's candidate:");
 					if ((element.type === Element.CHORD) || (element.tuplet)) 
 						break loopingsegments;
@@ -2022,6 +2286,7 @@ MuseScore {
 
             cursor.score.selection.clear();
             var curstmp = cursor.score.newCursor();
+			curstmp.track = cursor.track;
 
             res = false;
 			var hasTuplet=false;
@@ -2068,24 +2333,6 @@ MuseScore {
                 } else {
                     logThis("no element found at this tick " + ((el != null) ? ("(" + el.parent.tick + ")") : ""));
                 }
-
-				/*// 22/5: Tentative de gérer les HArmony
-				// alt : faire ça dans copySelection
-				// segment level
-				
-					var annotations = seg.annotations;
-				//console.log(annotations.length + " annotations");
-				if (annotations && (annotations.length > 0)) {
-					for(var h=0;h<annotations.length;h++) {
-						var e=annotations[h];
-						if (e.track===chord.track) {
-                            cursor.score.selection.select(e, true);
-                            logThis("adding " + e.userName() + " (" + el.parent.tick + ") to selection");
-						}
-					}
-					annotations=filtered;
-					targets.harmonies=annotations;
-				}*/
 
                 // seg = seg.next;
                 // seg = curstmp.next; // (-) déborde de la mesure, (+) ne prend que ce qu'on veut
