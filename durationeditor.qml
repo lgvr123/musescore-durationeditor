@@ -27,7 +27,7 @@ import "durationeditor"
 /* 	- 1.3.0.beta2: Forbid setDuration and setDot within tuplets
 /* 	- 1.3.0.beta2: log to file
 /* 	- 1.3.0.beta2: Single Voice edition
-/* 	- 1.3.0.beta2: Tuplet multivoice edition (ongoing)
+/* 	- 1.3.0.beta2: Tuplet multivoice edition
 /* 	- 1.3.0.beta2: Single voice copy/paste (incl. tuplets) copies all the annotations (incl. harmonies)
 
 /**********************************************/
