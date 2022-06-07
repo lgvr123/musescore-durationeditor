@@ -29,6 +29,8 @@ import "durationeditor"
 /* 	- 1.3.0.beta2: Single Voice edition
 /* 	- 1.3.0.beta2: Tuplet multivoice edition
 /* 	- 1.3.0.beta2: Single voice copy/paste (incl. tuplets) copies all the annotations (incl. harmonies)
+/* 	- 1.3.0.beta3: Correction in x/8 cases
+/* 	- 1.3.0.beta3: consider segments with rests but annotations as non empty
 
 /**********************************************/
 
@@ -838,7 +840,7 @@ MuseScore {
         // En x/8 si j'ai 2 notes sélectionnées, de même durée, j'autorise aussi à faire des 2:3
 		if (measureType === 8) { 
 			// on garde les tracks qui ont 2 accords et de même durée
-			var tsamdur=selection.tracks.filter(function(e) { 
+			var tsamedur=selection.tracks.filter(function(e) { 
 				return e.samedur && e.chords.length==2;
 			});
 
@@ -2233,12 +2235,26 @@ MuseScore {
 		loopingsegments:
         while (last!==null)  {
 			for(var track=fTrack;track<=lTrack;track++) {
+				// Causes for stopping
+				// 3) There are annotations at this segment for this track
+				var annotations=last.annotations;
+				for(var i=0;i<annotations.length;i++) {
+					if (annotations[i].track===track) 
+						break loopingsegments;
+				}
+
+
+
 				var element= _d(last, track);
 
 				if (element !== null) {
+					// Causes for stopping
+					// 1) The element is a Chord
+					// 2) The element belongs to a tuplet
 					debugSegment(last, track, "last segment's candidate:");
 					if ((element.type === Element.CHORD) || (element.tuplet)) 
 						break loopingsegments;
+					
 					the_real_last = last;
 					break;
 				}
