@@ -37,7 +37,7 @@ import "durationeditor"
 MuseScore {
     menuPath: "Plugins." + pluginName
     description: "Edit the notes and rests length by moving the next notes in the measure, instead of eating them."
-    version: "1.3.0.beta2"
+    version: "1.3.0.beta3"
     readonly property var pluginName: "Duration Editor"
     readonly property var selHelperVersion: "1.2.2"
     readonly property var noteHelperVersion: "1.0.5"
