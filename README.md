@@ -18,11 +18,6 @@ Where MuseScore works in a *vertical* approach (inserting a note in a measure wi
 * Improved single voice / multi voice behaviour of all functions
 
 
-## Demos
-![Duration Editor in action](/demo/demotuplets.gif)
-
-
-
 ## Features ##
 
 ### Features ###
