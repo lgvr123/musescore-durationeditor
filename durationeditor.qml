@@ -31,15 +31,17 @@ import "durationeditor"
 /* 	- 1.3.0.beta2: Single voice copy/paste (incl. tuplets) copies all the annotations (incl. harmonies)
 /* 	- 1.3.0.beta3: Correction in x/8 cases
 /* 	- 1.3.0.beta3: consider segments with rests but annotations as non empty
+/* 	- 1.3.0.beta3: new selectionhelper.js version
+/* 	- 1.3.0.beta3: Qt.quit issue
 
 /**********************************************/
 
 MuseScore {
     menuPath: "Plugins." + pluginName
     description: "Edit the notes and rests length by moving the next notes in the measure, instead of eating them."
-    version: "1.3.0.beta3"
+    version: "1.3.0"
     readonly property var pluginName: "Duration Editor"
-    readonly property var selHelperVersion: "1.2.2"
+    readonly property var selHelperVersion: "1.3.0"
     readonly property var noteHelperVersion: "1.0.5"
 
     readonly property var debug: false
@@ -49,6 +51,9 @@ MuseScore {
     requiresScore: false
     width: 450
     height: 200
+	
+	id: mainWindow
+
 
     readonly property var imgHeight: 32
     readonly property var imgPadding: 8
@@ -2394,7 +2399,7 @@ MuseScore {
         title: 'Invalid libraries'
         text: "Invalid 'zparkingb/notehelper.js' or 'zparkingb/selhelper.js' versions.\nExpecting " + noteHelperVersion + " and " + selHelperVersion + ".\n" + pluginName + " will stop here."
         onAccepted: {
-            Qt.quit()
+            mainWindow.parent.Window.window.close(); //Qt.quit()
         }
     }
 

@@ -1,10 +1,11 @@
 /**********************
 /* Parking B - MuseScore - Selection helper
-/* v1.0.0
+/* v1.3.0
 /* v1.2.0 28/9/21 getChordsRestsFromCursor
 /* v1.2.1 2/10/21 corrected name of checktVersion
 /* v1.2.2 15/03/22 correction in getChordsRestsFromSelection
 /* v1.2.3 16/03/22 better handling of absence of opened score
+/* v1.3.0 18/06/22 Multiple track selection
 /**********************************************/
 
 // -----------------------------------------------------------------------
@@ -15,7 +16,7 @@ function checktVersion(expected) {
     return checkVersion(expected);
 }
 function checkVersion(expected) {
-    var version = "1.2.3";
+    var version = "1.3.0";
 
 	var aV = version.split('.').map(function (v) {return parseInt(v);});
 	var aE = (expected && (expected != null)) ? expected.split('.').map(function (v) {return parseInt(v);}) : [99];
@@ -215,7 +216,7 @@ function getNotesFromCursor(oneNoteBySegment) {
 function getChordsFromCursor() {
 	if (curScore==null) return [];
     var score = curScore;
-    var cursor = curScore.newCursor()
+    var cursor = curScore.newCursor();
         var firstTick,
     firstStaff,
     lastTick,
@@ -231,6 +232,7 @@ function getChordsFromCursor() {
         lastTick = curScore.lastSegment.tick + 1;
     }
     lastStaff = cursor.track;
+    console.log("getChordsFromCursor ** ");
     debugV(30, "> first", "tick", firstTick);
     debugV(30, "> first", "track", firstStaff);
     debugV(30, "> last", "tick", lastTick);
@@ -244,14 +246,13 @@ function getChordsFromCursor() {
             var element;
             element = segment.elementAt(track);
             if (element && element.type == Element.CHORD) {
-                debugV(40, "- segment -", "tick", segment.tick);
-                debugV(40, "- segment -", "segmentType", segment.segmentType);
-                debugV(40, "--element", "label", (element) ? element.name : "null");
+				debugSegment(segment, track);
                 chords[chords.length] = element;
             }
         }
-        cursor.next();
-        segment = cursor.segment;
+        // cursor.next();
+        // segment = cursor.segment;
+        segment = segment.next; // 18/6/22 : looping thru all segments, and only defined at the curso level (which is bound to track)
     }
 
     return chords;
@@ -276,6 +277,7 @@ function getChordsRestsFromCursor() {
         lastTick = curScore.lastSegment.tick + 1;
     }
     lastStaff = cursor.track;
+    console.log("getChordsRestsFromCursor ** ");
     debugV(30, "> first", "tick", firstTick);
     debugV(30, "> first", "track", firstStaff);
     debugV(30, "> last", "tick", lastTick);
@@ -289,15 +291,13 @@ function getChordsRestsFromCursor() {
             var element;
             element = segment.elementAt(track);
             if (element && (element.type == Element.CHORD || element.type == Element.REST)) {
-                debugV(40, "- segment -", "tick", segment.tick);
-                debugV(40, "- segment -", "segmentType", segment.segmentType);
-                debugV(40, "--element", "label", (element) ? element.name : "null");
+				debugSegment(segment, track);
                 chords[chords.length] = element;
             }
-
         }
-        cursor.next();
-        segment = cursor.segment;
+        // cursor.next();
+        // segment = cursor.segment;
+        segment = segment.next; // 18/6/22 : looping thru all segments, and only defined at the curso level (which is bound to track)
     }
 
     return chords;
@@ -329,6 +329,7 @@ function getRestsFromCursor() {
         lastTick = curScore.lastSegment.tick + 1;
     }
     lastStaff = cursor.track;
+    console.log("getRestsFromCursor ** ");
     debugV(30, "> first", "tick", firstTick);
     debugV(30, "> first", "track", firstStaff);
     debugV(30, "> last", "tick", lastTick);
@@ -342,64 +343,18 @@ function getRestsFromCursor() {
             var element;
             element = segment.elementAt(track);
             if (element && element.type == Element.REST) {
-                debugV(40, "- segment -", "tick", segment.tick);
-                debugV(40, "- segment -", "segmentType", segment.segmentType);
-                debugV(40, "--element", "label", (element) ? element.name : "null");
-                rests.push(element);
+				debugSegment(segment, track);
+                chords[chords.length] = element;
             }
         }
-        cursor.next();
-        segment = cursor.segment;
+        // cursor.next();
+        // segment = cursor.segment;
+        segment = segment.next; // 18/6/22 : looping thru all segments, and only defined at the curso level (which is bound to track)
     }
 
     return rests;
 }
 
-function getChordsFromCursor() {
-	if (curScore==null) return [];
-    var score = curScore;
-    var cursor = curScore.newCursor()
-        var firstTick,
-    firstStaff,
-    lastTick,
-    lastStaff;
-    // start
-    cursor.rewind(Cursor.SELECTION_START);
-    firstTick = cursor.tick;
-    firstStaff = cursor.track;
-    // end
-    cursor.rewind(Cursor.SELECTION_END);
-    lastTick = cursor.tick;
-    if (lastTick == 0) { // dealing with some bug when selecting to end.
-        lastTick = curScore.lastSegment.tick + 1;
-    }
-    lastStaff = cursor.track;
-    debugV(30, "> first", "tick", firstTick);
-    debugV(30, "> first", "track", firstStaff);
-    debugV(30, "> last", "tick", lastTick);
-    debugV(30, "> last", "track", lastStaff);
-    var chords = [];
-    for (var track = firstStaff; track <= lastStaff; track++) {
-
-        cursor.rewind(Cursor.SELECTION_START);
-        var segment = cursor.segment;
-        while (segment && (segment.tick < lastTick)) {
-            var element;
-            element = segment.elementAt(track);
-            if (element && element.type == Element.CHORD) {
-                debugV(40, "- segment -", "tick", segment.tick);
-                debugV(40, "- segment -", "segmentType", segment.segmentType);
-                debugV(40, "--element", "label", (element) ? element.name : "null");
-                chords[chords.length] = element;
-            }
-
-            cursor.next();
-            segment = cursor.segment;
-        }
-    }
-
-    return chords;
-}
 
 /**
  * Get all the selected notes and rests based on the cursor.
@@ -428,6 +383,7 @@ function getNotesRestsFromCursor(oneNoteBySegment) {
         lastTick = curScore.lastSegment.tick + 1;
     }
     lastStaff = cursor.track;
+    console.log("getNotesRestsFromCursor ** ");
     debugV(30, "> first", "tick", firstTick);
     debugV(30, "> first", "track", firstStaff);
     debugV(30, "> last", "tick", lastTick);
@@ -441,9 +397,7 @@ function getNotesRestsFromCursor(oneNoteBySegment) {
             var element;
             element = segment.elementAt(track);
             if (element && ((element.type == Element.REST) || (element.type == Element.CHORD))) {
-                debugV(40, "- segment -", "tick", segment.tick);
-                debugV(40, "- segment -", "segmentType", segment.segmentType);
-                debugV(40, "--element", "label", (element) ? element.name : "null");
+				debugSegment(segment, track);
 
                 if (element.type == Element.CHORD) {
                     // extracting the notes from the chord
@@ -460,8 +414,9 @@ function getNotesRestsFromCursor(oneNoteBySegment) {
                 }
             }
         }
-        cursor.next();
-        segment = cursor.segment;
+        // cursor.next();
+        // segment = cursor.segment;
+        segment = segment.next; // 18/6/22 : looping thru all segments, and only defined at the curso level (which is bound to track)
     }
 
     return rests;
@@ -490,8 +445,9 @@ function getSegmentsFromCursor() {
     var s = 0;
     while (segment && (segment.tick < lastTick)) {
         segments[s++] = segment;
-        cursor.next();
-        segment = cursor.segment;
+        // cursor.next();
+        // segment = cursor.segment;
+        segment = segment.next; // 18/6/22 : looping thru all segments, and only defined at the curso level (which is bound to track)
     }
 
     return segments;
@@ -500,7 +456,7 @@ function getSegmentsFromCursor() {
 function getChordsRestsFromScore() {
 	if (curScore==null) return [];
     var score = curScore;
-    var cursor = curScore.newCursor()
+    var cursor = curScore.newCursor();
         var firstTick,
     firstStaff,
     lastTick,
@@ -510,32 +466,30 @@ function getChordsRestsFromScore() {
     firstTick = cursor.tick;
     firstStaff = cursor.track;
     // end
-    cursor.rewind(Cursor.SELECTION_END);
-    lastTick = cursor.tick;
-    if (lastTick == 0) { // dealing with some bug when selecting to end.
-        lastTick = curScore.lastSegment.tick + 1;
-    }
-    lastStaff = cursor.track;
+    lastTick = curScore.lastSegment.tick + 1;
+	lastStaff= curScore.ntracks;
+    console.log("getChordsRestsFromScore ** ");
     debugV(30, "> first", "tick", firstTick);
     debugV(30, "> first", "track", firstStaff);
+    debugV(30, "> last", "tick", lastTick);
+    debugV(30, "> last", "track", lastStaff);
     var chords = [];
 
-    cursor.rewind(Cursor.SELECTION_START);
+    cursor.rewind(0);
     var segment = cursor.segment;
     while (segment) {
         for (var track = firstStaff; track <= lastStaff; track++) {
             var element;
             element = segment.elementAt(track);
             if (element && (element.type == Element.CHORD || element.type == Element.REST)) {
-                debugV(40, "- segment -", "tick", segment.tick);
-                debugV(40, "- segment -", "segmentType", segment.segmentType);
-                debugV(40, "--element", "label", (element) ? element.name : "null");
+				debugSegment(segment, track);
                 chords[chords.length] = element;
             }
 
         }
-        cursor.next();
-        segment = cursor.segment;
+        // cursor.next();
+        // segment = cursor.segment;
+        segment = segment.next; // 18/6/22 : looping thru all segments, and only defined at the curso level (which is bound to track)
     }
 
     return chords;
@@ -544,4 +498,12 @@ function getChordsRestsFromScore() {
 
 function debugV(level, label, prop, value) {
     console.log(label + " " + prop + ":" + value);
+}
+
+function debugSegment(segment, track, label) {
+    var el = (segment !== null) ? segment.elementAt(track) : null;
+    console.log((label ? (label + " ") : "") + "segment (" + ((segment !== null) ? segment.tick : "null") + ") =" +
+        ((segment !== null) ? segment.segmentType : "null") +
+        " (with " + ((el !== null) ? el.userName() : "null") +
+        " on track " + track + ")");
 }

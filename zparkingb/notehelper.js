@@ -174,7 +174,10 @@ function buildPitchedNote(noteName, accidental) {
 }
 
 /**
- *
+ * keepRestDuration: duration|boolean|undefined 
+ * * duration: on the form of duration.numerator, duration.denominator : the duration to force
+ * * boolean==true: keep the rest duration
+ * * boolean==false | undefined: the duration will be quarter
  */
 function restToNote(rest, toNote, keepRestDuration) {
     if (rest.type != Element.REST)
