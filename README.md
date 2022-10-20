@@ -8,16 +8,19 @@ Where MuseScore works in a *vertical* approach (inserting a note in a measure wi
 
 
 
-## New in 1.3.0 beta2
-### Improved
-* Improved single voice / multi voice behaviour of all functions
-* Many bugfixes in the _Tuplet_ edition
-* The single voice eidtion and the tuplet conversions handle more note properties and handles all the annotation texts (incl. chord symbols)
+## New in 1.3.0
+### New
+* Tuplets insert and removal:  convert tuplets to regular consecutive notes/rests
 * The _Tie_ function can tie back and forth, from a rest and from a note.
 
-### Remarks
-Although having been thoroughly tested, this 1.3.0 beta2 is WORK IN PROGRESS.
-For a stable version, please prefer the [release 1.2.0](https://github.com/lgvr123/musescore-durationeditor/releases/tag/1.2.0 "release 1.2.0").
+### Improved
+* Core functions: better handling of non-4/4 measures
+* Improved single voice / multi voice behaviour of all functions
+
+
+## Demos
+![Duration Editor in action](/demo/demotuplets.gif)
+
 
 
 ## Features ##
