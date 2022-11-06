@@ -54,8 +54,7 @@ Where MuseScore works in a *vertical* approach (inserting a note in a measure wi
 Due to the “sensible” nature of MuseScore’s API, and although having been thoroughly tested, you may fall into some limit cases where the plugin crashes MuseScore. No such cases have been detected since the version 1.0.1, but there is no warranty or whatsoever.
 
 ## Download and Install ##
-Download the [last beta](https://github.com/lgvr123/musescore-elementanalyser/releases "1.3.0 beta2").
-For a stable version, please prefer the [release 1.2.0](https://github.com/lgvr123/musescore-durationeditor/releases/tag/1.2.0 "release 1.2.0").
+Download the [last version](https://github.com/lgvr123/musescore-elementanalyser/releases).
 For installation see [Plugins](https://musescore.org/en/handbook/3/plugins "handbook").
 
 ## And if you like this note-entry paradigm... ##
