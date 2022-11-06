@@ -47,7 +47,8 @@ Where MuseScore works in a *vertical* approach (inserting a note in a measure wi
 * The _Insert and Remove tuplets_ as well as the _Single voice edition_ do not manage all the notes characteristics. Some of them might by lost when performing those actions. This is improved in 1.3.0
 
 ## Support ##
-[![Support on Tipeee](/support/Button-Tipeee.png)](https://fr.tipeee.com/parkingb)
+[<img src="/support/Button-Tipeee.png" alt="Support me on Tipee" height="80"/>](https://fr.tipeee.com/parkingb)
+
 
 
 ## Attention ##
