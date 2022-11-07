@@ -10,7 +10,7 @@ Where MuseScore works in a *vertical* approach (inserting a note in a measure wi
 
 ## New in 1.3.0
 ### New
-* Tuplets insert and removal:  convert tuplets to regular consecutive notes/rests
+* Tuplets insert and removal: convert tuplets to regular consecutive notes/rests
 * The _Tie_ function can tie back and forth, from a rest and from a note.
 
 ### Improved
@@ -47,9 +47,12 @@ Where MuseScore works in a *vertical* approach (inserting a note in a measure wi
 * The _Insert and Remove tuplets_ as well as the _Single voice edition_ do not manage all the notes characteristics. Some of them might by lost when performing those actions. This is improved in 1.3.0
 
 ## Sponsorship ##
+If you appreciate my plugins, you can support and sponsor their development on the following platforms:
 [<img src="/support/Button-Tipeee.png" alt="Support me on Tipee" height="50"/>](https://www.tipeee.com/parkingb) 
 [<img src="/support/paypal.jpg" alt="Support me on Paypal" height="55"/>](https://www.paypal.me/LaurentvanRoy) 
 [<img src="/support/patreon.png" alt="Support me on Patreon" height="25"/>](https://patreon.com/parkingb)
+
+And also check my **[Zploger application](https://www.parkingb.be/zploger)**, a tool for managing a library of scores, with extended MuseScore support.
 
 
 ## Attention ##
