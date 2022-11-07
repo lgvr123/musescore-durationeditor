@@ -46,9 +46,10 @@ Where MuseScore works in a *vertical* approach (inserting a note in a measure wi
 * All the actions are undoable. It will require up-to 2-5 undos before completely undoing a action.
 * The _Insert and Remove tuplets_ as well as the _Single voice edition_ do not manage all the notes characteristics. Some of them might by lost when performing those actions. This is improved in 1.3.0
 
-## Support ##
-[<img src="/support/Button-Tipeee.png" alt="Support me on Tipee" height="80"/>](https://fr.tipeee.com/parkingb)
-
+## Sponsorship ##
+[<img src="/support/Button-Tipeee.png" alt="Support me on Tipee" height="50"/>](https://www.tipeee.com/parkingb) 
+[<img src="/support/paypal.jpg" alt="Support me on Paypal" height="55"/>](https://www.paypal.me/LaurentvanRoy) 
+[<img src="/support/patreon.png" alt="Support me on Patreon" height="25"/>](https://patreon.com/parkingb)
 
 
 ## Attention ##
