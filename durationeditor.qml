@@ -11,8 +11,7 @@ import "durationeditor"
 
 /**********************
 /* Parking B - DurationEditor - New approach for note duration edition
-/* v1.3.0
-/* ChangeLog:
+/* ChangeLog:e
 /* 	- 1.1.0: Initial releasee
 /* 	- 1.3.0.alpha1: New Tuplet functionality
 /* 	- 1.3.0.beta1: Bugfix for measures <> 4/4
@@ -33,16 +32,18 @@ import "durationeditor"
 /* 	- 1.3.0.beta3: consider segments with rests but annotations as non empty
 /* 	- 1.3.0.beta3: new selectionhelper.js version
 /* 	- 1.3.0.beta3: Qt.quit issue
+/* 	- 1.3.1 (ongoing): moved copy- and pasteSelection to SelHelper
+/* 	- 1.3.1 (ongoing): new version of selectionhelper.js and notehelper.js
 
 /**********************************************/
 
 MuseScore {
     menuPath: "Plugins." + pluginName
     description: "Edit the notes and rests length by moving the next notes in the measure, instead of eating them."
-    version: "1.3.0"
+    version: "1.3.1"
     readonly property var pluginName: "Duration Editor"
-    readonly property var selHelperVersion: "1.3.0"
-    readonly property var noteHelperVersion: "1.0.5"
+    readonly property var selHelperVersion: "1.3.1"
+    readonly property var noteHelperVersion: "2.0.2"
 
     readonly property var debug: false
 
@@ -446,7 +447,7 @@ MuseScore {
                     cmd("cut");
                 } else {
                     logThis("SingleVoice cut");
-                    localCopy = copySelection(score.selection.elements);
+                    localCopy = SelHelper.copySelection(score.selection.elements);
                     // logThis("CMD: cmd(\"delete\")");
                     // cmd("delete");
                     logThis("CMD: cmd(\"pad-rest\")");
@@ -514,7 +515,7 @@ MuseScore {
                     cmd("paste");
                 } else {
                     logThis("SingleVoice paste");
-					pasteSelection(cursor, localCopy);
+					SelHelper.pasteSelection(cursor, localCopy);
                 }
             }
             //endCmd(score);
@@ -533,7 +534,7 @@ MuseScore {
                     cmd("cut");
                 } else {
                     logThis("SingleVoice cut");
-                    localCopy = copySelection(score.selection.elements);
+                    localCopy = SelHelper.copySelection(score.selection.elements);
                     logThis("CMD: cmd(\"delete\")");
                     cmd("delete");
                 }
@@ -571,7 +572,7 @@ MuseScore {
                     cmd("paste");
                 } else {
                     logThis("SingleVoice paste");
-					pasteSelection(cursor, localCopy);
+					SelHelper.pasteSelection(cursor, localCopy);
                 }
             }
 
@@ -908,7 +909,7 @@ MuseScore {
 		    var track = selection.tracks[t];
 			logThis("** Copying tuplet "+t+" (track "+track.track+")");
 
-		    targets[t] = copySelection(track.chords);
+		    targets[t] = SelHelper.copySelection(track.chords);
 		}		
 		
 		// Working track by track
@@ -955,7 +956,7 @@ MuseScore {
 		    endCmd(curScore, "addTuplet");
 
 		    // 3) re-adding the notes
-		    pasteSelection(cursor, targets[t]);
+		    SelHelper.pasteSelection(cursor, targets[t]);
 			
 			logThis("** Done with tuplet "+t+" (track "+track.track+")");
 
@@ -985,7 +986,7 @@ MuseScore {
 		    var track = selection.tracks[t];
 			logThis("** Copying tuplet "+t+" (track "+track.track+")");
 
-		    targets[t] = copySelection(track.chords);
+		    targets[t] = SelHelper.copySelection(track.chords);
 		}		
 
 		// computing the new duration
@@ -1041,168 +1042,8 @@ MuseScore {
 		    }
 
 			
-			pasteSelection(cursor, targets[t]);
+			SelHelper.pasteSelection(cursor, targets[t]);
 		}
-
-    }
-
-	/**
-	* Copy segment by segment, track by track, the CHORDREST found a this segment.
-	* Includes the annotations at this segment, as well as the notes and their properties
-	*/
-    function copySelection(chords) {
-        logThis("Copying " + chords.length + " elements canidates");
-        var targets = [];
-        loopelements:
-        for (var i = 0; i < chords.length; i++) {
-            var chord = chords[i];
-
-            if (chord.type === Element.NOTE) {
-                logThis("!! note element in the selection. Using its parent's chord instead");
-                chord = chord.parent;
-
-                for (var c = 0; c < targets.length; c++) {
-                    if ((targets[c].tick === chord.parent.tick) && (targets[c].track === chord.track)) {
-						logThis("dropping this note, because we have already added its parent's chord in the selection");
-                        continue loopelements;
-					}
-                }
-            }
-
-            logThis("Copying " + i + ": " + chord.userName() + " - " + (chord.duration ? chord.duration.str : "null") + ", notes: " + (chord.notes ? chord.notes.length : 0));
-            var target = {
-				"_element": chord,
-				"tick": chord.parent.tick,
-				"track": chord.track,
-                "duration": (chord.duration?{
-                    "numerator": chord.duration.numerator,
-                    "denominator": chord.duration.denominator,
-                }:null),
-                "lyrics": chord.lyrics,
-                "graceNotes": chord.graceNotes,
-				"notes": undefined,
-				"annotations": [],
-				"_username": chord.userName(),
-				"userName": function() { return this._username;} //must be "chords[i]"
-            };
-
-            // If CHORD, then remember the notes. Otherwise treat as a rest
-            if (chord.type === Element.CHORD) {
-                target.notes = chord.notes;
-            };
-
-			// Searching for harmonies & other annotations
-			var seg=chord;
-			while(seg && seg.type!==Element.SEGMENT) {
-				seg=seg.parent
-			}
-			
-			if(seg!==null) {
-				var annotations = seg.annotations;
-				//console.log(annotations.length + " annotations");
-				if (annotations && (annotations.length > 0)) {
-					var filtered=[];
-					// annotations=annotations.filter(function(e) {
-						// return (e.type === Element.HARMONY) && (e.track===chord.track);
-					// });
-					for(var h=0;h<annotations.length;h++) {
-						var e=annotations[h];
-						if (/*(e.type === Element.HARMONY) &&*/ (e.track===chord.track)) 
-							filtered.push(e);
-					}
-					annotations=filtered;
-					target.annotations=annotations;
-				} else annotations=[]; // DEBUG
-				logThis("--Annotations: " + annotations.length + ((annotations.length > 0) ? (" (\"" + annotations[0].text + "\")") : ""));
-			}
-			// Done
-            targets.push(target);
-            // logThis("--Lyrics: " + target.lyrics.length + ((target.lyrics.length > 0) ? (" (\"" + target.lyrics[0].text + "\")") : ""));
-        }
-
-        logThis("Ending was a copy of " + targets.length + " elements");
-
-        return targets;
-
-    }
-
-    function pasteSelection(cursor, targets) {
-        // startCmd(curScore, "pasteSelection"); // Non, on a déjà un startCmd dans restToChord
-		logThis("Pasting "+targets.length+" elements at "+cursor.tick+"/"+cursor.track);
-        for (var i = 0; i < targets.length; i++) {
-            var target = targets[i];
-
-            //var target = targets[i]._element; // TEST - DIRECTEMENT UTILISER LES NOTES MEMEORISEES --> KO (du moins sur les durées)
-            var tick = cursor.tick;
-			
-            logThis("Pasting " + i + ": " + target.userName() + " - "+ target.duration.numerator + "/" + target.duration.denominator + ", notes: " + (target.notes ? target.notes.length : 0));
-
-			// element level
-            if (target.notes && target.notes.length > 0) {
-                var pitches = [];
-                for (var j = 0; j < target.notes.length; j++) {
-                    // pitches.push(target.notes[j].pitch);
-                    var n = {
-                        "pitch": target.notes[j].pitch,
-                        "tpc1": target.notes[j].tpc1,
-                        "tpc2": target.notes[j].tpc2
-                    };
-                    pitches.push(n);
-                }
-                startCmd(curScore, "restToChord");
-				logThis("- pasting the notes");
-                NoteHelper.restToChord(cursor.element, pitches, true); // with keepRestDuration=true
-                endCmd(curScore, "restToChord");
-            }
-
-			logThis("- adapting duration");
-            // startCmd(curScore, "adapt duration"); //DEBUG
-            cursor.rewindToTick(tick);
-			// w/a setting to a duration < what we need, in order to be sure the duration will change 
-			// (e.g. changing from 1/4 to 1/4 when the rest is not visible) won't make it appear. We need to do 1/4 -> (something else) -> 1/4
-            cursorToDuration(cursor, durationTo64(target.duration)/2);
-            cursorToDuration(cursor, durationTo64(target.duration));
-            
-            if ((target.lyrics && target.lyrics.length > 0) || (target.annotations && target.annotations.length > 0)) {
-				var current = cursor.element;
-				// debugO("Target", target,["lyrics","notes"],true);
-                // lyrics
-                startCmd(curScore, "adding the texts");
-                logThis("- adding the lyrics: " + target.lyrics.length + " on " + current.userName());
-                if (target.lyrics) {
-                    for (var j = 0; j < target.lyrics.length; j++) {
-                        var lorig = target.lyrics[j];
-                        logThis("-- adding a lyric: \"" + lorig.text + "\"");
-                        // current.add(lorig); // no error but the lyric is not to be seen
-                        var lnew = newElement(Element.LYRICS);
-                        lnew.text = lorig.text;
-                        current.add(lnew);
-                    }
-                }
-
-                // annotations
-                logThis("- adding the annotations: " + target.annotations.length + " on " + current.userName());
-                if (target.annotations) {
-                    for (var j = 0; j < target.annotations.length; j++) {
-                        var lorig = target.annotations[j];
-                        logThis("-- adding a " + lorig.userName() + ": \"" + lorig.text + "\"");
-                        // current.add(lorig); // no error but the lyric is not to be seen
-                        var lnew = newElement(lorig.type);
-                        lnew.text = lorig.text;
-                        cursor.add(lnew);
-						
-						// removing the former copied element
-						removeElement(lorig);
-                    }
-                }
-                endCmd(curScore, "adding the texts");
-            }
-            cursor.rewindToTick(tick);
-			
-			// Moving to next segment 
-			moveNext(cursor); 
-        }
-		//endCmd(curScore, "pasteSelection");
 
     }
 

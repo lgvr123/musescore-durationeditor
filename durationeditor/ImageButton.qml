@@ -8,7 +8,8 @@ import QtQuick.Controls 2.2
 /* 	- 1.1.0: Initial release
 /* 	- 1.1.0: New color for Disabled mode
 /* 	- 1.2.0: New fillMode option
-/*  - 1.2.1: Sizing corrections
+/*  - 1.2.1: Sizing corrections			  
+/*  - 1.2.2: Use of palettes color
 /**********************************************/
 
 Button {
@@ -25,7 +26,7 @@ Button {
         implicitWidth: smbtn.width
         implicitHeight: smbtn.height
 
-        color: smbtn.down ? "#C0C0C0" : (smbtn.enabled?(smbtn.hovered ? "#D0D0D0" : (smbtn.highlighted?"lightsteelblue":"transparent" /*"#E0E0E0"*/)):"#D7CEE0")
+        color: smbtn.down ? sysActivePalette.shadow : (smbtn.hovered ? sysActivePalette.mid : (smbtn.highlighted?sysActivePalette.highlight:"transparent"))
         //border.color: "red"
         //border.width: 1
         radius: 4
@@ -36,6 +37,7 @@ Button {
         source: smbtn.imageSource
         height: 18
         fillMode: Image.PreserveAspectFit // ensure it fits
+        opacity: smbtn.enabled?1:0.2
         mipmap: true // smoothing
         anchors.centerIn: parent
     }
@@ -44,5 +46,15 @@ Button {
     ToolTip.delay: 1000
     ToolTip.timeout: 5000
     ToolTip.visible: hovered
+
+    
+    SystemPalette {
+        id: sysActivePalette;
+        colorGroup: SystemPalette.Active
+    }
+    SystemPalette {
+        id: sysDisabledPalette;
+        colorGroup: SystemPalette.Disabled
+    }
 
 }
