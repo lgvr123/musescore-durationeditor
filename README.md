@@ -72,7 +72,8 @@ For installation see [Plugins](https://musescore.org/en/handbook/3/plugins "hand
 ## And if you like this note-entry paradigm... ##
 The goal of that plugin is to demonstrate that there is another note-entry paradigm needed/possible in MuseScore.
 The ultimate goal is to have this paradigm available natively in MuseScore without any plugin.
-If you like that approach, don't hesitate to the drop a message on the [MuseScore forum](https://musescore.org/en/node/321244) about you liking this way of working. 
+
+If you like that approach, don't hesitate to thumb-up the feature request [Change the rhythm of notes and move automatically the next ones](https://github.com/musescore/MuseScore/issues/19513).
 
 
 ## IMPORTANT
